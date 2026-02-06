@@ -16,6 +16,10 @@ import androidx.navigation.NavController
 import com.xihale.snirect.data.repository.ConfigRepository
 import kotlinx.coroutines.launch
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Shield
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DnsScreen(
@@ -24,7 +28,6 @@ fun DnsScreen(
 ) {
     var nameservers by remember { mutableStateOf<List<String>>(emptyList()) }
     var bootstrapDns by remember { mutableStateOf("") }
-    var checkHostname by remember { mutableStateOf(false) }
     
     val scope = rememberCoroutineScope()
     
@@ -37,20 +40,22 @@ fun DnsScreen(
     LaunchedEffect(Unit) {
         repository.bootstrapDns.collect { bootstrapDns = it }
     }
-    LaunchedEffect(Unit) {
-        repository.checkHostname.collect { checkHostname = it }
-    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("DNS Configuration") },
+            LargeTopAppBar(
+                title = { Text("DNS Resolver") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showAddDialog = true }) {
+                Icon(Icons.Default.Add, contentDescription = "Add Server")
+            }
         }
     ) { padding ->
         Column(
@@ -58,65 +63,50 @@ fun DnsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Resolver Settings",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            OutlinedTextField(
-                value = bootstrapDns,
-                onValueChange = { 
-                    bootstrapDns = it
-                    scope.launch { repository.setBootstrapDns(it) }
-                },
-                label = { Text("Bootstrap DNS") },
-                supportingText = { Text("IP address to resolve DoH domains (default: tls://223.5.5.5)") },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            HorizontalDivider()
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Nameservers (DoH)",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
+            SettingsGroup(title = "Bootstrap") {
+                ListItem(
+                    headlineContent = { Text("Bootstrap DNS") },
+                    supportingContent = {
+                        OutlinedTextField(
+                            value = bootstrapDns,
+                            onValueChange = { 
+                                bootstrapDns = it
+                                scope.launch { repository.setBootstrapDns(it) }
+                            },
+                            placeholder = { Text("tls://223.5.5.5") },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            singleLine = true,
+                            shape = MaterialTheme.shapes.medium
+                        )
+                    },
+                    leadingContent = { Icon(Icons.Default.Shield, null, tint = MaterialTheme.colorScheme.primary) }
                 )
-                IconButton(onClick = { showAddDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Server")
-                }
             }
 
-            nameservers.forEach { server ->
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = server,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = {
-                            val newList = nameservers.toMutableList()
-                            newList.remove(server)
-                            scope.launch { repository.setNameservers(newList) }
-                        }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remove")
-                        }
+            SettingsGroup(title = "Upstream Nameservers (DoH/DoT)") {
+                if (nameservers.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text("No custom nameservers", color = MaterialTheme.colorScheme.outline)
                     }
+                }
+
+                nameservers.forEach { server ->
+                    ListItem(
+                        headlineContent = { Text(server) },
+                        leadingContent = { Icon(Icons.Default.Dns, null, tint = MaterialTheme.colorScheme.secondary) },
+                        trailingContent = {
+                            IconButton(onClick = {
+                                val newList = nameservers.toMutableList()
+                                newList.remove(server)
+                                scope.launch { repository.setNameservers(newList) }
+                            }) {
+                                Icon(Icons.Default.Delete, "Remove", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -125,17 +115,19 @@ fun DnsScreen(
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("Add Nameserver") },
+            title = { Text("Add Upstream") },
             text = {
                 OutlinedTextField(
                     value = newNameserver,
                     onValueChange = { newNameserver = it },
-                    label = { Text("DoH URL") },
-                    placeholder = { Text("https://dns.google/dns-query") }
+                    label = { Text("Endpoint URL") },
+                    placeholder = { Text("https://dns.google/dns-query") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                Button(onClick = {
                     if (newNameserver.isNotBlank()) {
                         val newList = nameservers.toMutableList()
                         newList.add(newNameserver.trim())

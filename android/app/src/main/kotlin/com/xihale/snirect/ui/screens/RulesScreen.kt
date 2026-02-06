@@ -23,6 +23,13 @@ import com.xihale.snirect.data.repository.ConfigRepository
 import com.xihale.snirect.data.repository.RuleWithSource
 import kotlinx.coroutines.launch
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.ui.text.style.TextOverflow
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RulesScreen(
@@ -35,10 +42,21 @@ fun RulesScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var updateUrl by remember { mutableStateOf("") }
+    
+    var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         rulesWithSource = repository.getAllRulesWithSource()
         repository.updateUrl.collect { updateUrl = it }
+    }
+
+    val filteredRules = remember(rulesWithSource, searchQuery) {
+        if (searchQuery.isEmpty()) rulesWithSource
+        else rulesWithSource.filter { item ->
+            item.rule.patterns.any { it.contains(searchQuery, ignoreCase = true) } ||
+            item.rule.targetSni.contains(searchQuery, ignoreCase = true) ||
+            item.rule.targetIp.contains(searchQuery, ignoreCase = true)
+        }
     }
 
     fun saveRule(newRule: Rule, oldRule: Rule? = null) {
@@ -86,19 +104,37 @@ fun RulesScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Rules Management") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Column {
+                TopAppBar(
+                    title = { Text("Traffic Rules") },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { fetchRules() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Update Rules")
+                        }
                     }
-                },
-                actions = {
-                    IconButton(onClick = { fetchRules() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Update Rules")
-                    }
-                }
-            )
+                )
+                
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Filter rules...") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Close, null)
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = CircleShape
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showDialog = true }) {
@@ -108,10 +144,10 @@ fun RulesScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(rulesWithSource) { item ->
+            items(filteredRules) { item ->
                 RuleItem(
                     rule = item.rule,
                     isOverwrite = item.isOverwrite,
@@ -151,46 +187,72 @@ fun RuleItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val cardColor = if (isOverwrite) {
-        MaterialTheme.colorScheme.primaryContainer
+    val containerColor = if (isOverwrite) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
     } else {
-        MaterialTheme.colorScheme.surfaceVariant
+        MaterialTheme.colorScheme.surface
     }
 
-    ElevatedCard(
+    OutlinedCard(
         onClick = onEdit,
-        colors = CardDefaults.elevatedCardColors(containerColor = cardColor)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        colors = CardDefaults.outlinedCardColors(containerColor = containerColor)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = if (isOverwrite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = if (isOverwrite) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                        shape = MaterialTheme.shapes.extraSmall
+                    ) {
+                        Text(
+                            if (isOverwrite) "LOCAL" else "SYNCED",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        text = if (isOverwrite) "[Overwrite]" else "[Download]",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isOverwrite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = rule.patterns.joinToString(", "),
+                        text = rule.patterns.firstOrNull() ?: "No pattern",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    if (rule.patterns.size > 1) {
+                        Text(
+                            " +${rule.patterns.size - 1}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
                 }
+                
+                Spacer(Modifier.height(4.dp))
+                
                 if (rule.targetSni.isNotEmpty()) {
-                    Text("SNI: ${rule.targetSni}", style = MaterialTheme.typography.bodyMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Shield, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+                        Spacer(Modifier.width(4.dp))
+                        Text("SNI: ${rule.targetSni}", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 if (rule.targetIp.isNotEmpty()) {
-                    Text("IP: ${rule.targetIp}", style = MaterialTheme.typography.bodyMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+                        Spacer(Modifier.width(4.dp))
+                        Text("IP: ${rule.targetIp}", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
             if (isOverwrite) {
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                    Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
                 }
             }
         }

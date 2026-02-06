@@ -18,6 +18,14 @@ import androidx.navigation.NavController
 import com.xihale.snirect.data.repository.ConfigRepository
 import kotlinx.coroutines.launch
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.automirrored.filled.Rule
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Update
+import androidx.compose.material.icons.filled.NetworkCheck
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -54,7 +62,7 @@ fun SettingsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeTopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
@@ -69,208 +77,166 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Network Settings",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            OutlinedTextField(
-                value = mtu,
-                onValueChange = { 
-                    mtu = it
-                    it.toIntOrNull()?.let { value ->
-                        scope.launch { repository.setMtu(value) }
-                    }
-                },
-                label = { Text("MTU") },
-                supportingText = { Text("Standard: 1500") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            var showWarningDialog by remember { mutableStateOf(false) }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Check Hostname", style = MaterialTheme.typography.bodyLarge)
-                    Text("Verify SSL certificate of target server", style = MaterialTheme.typography.bodySmall)
-                }
-                Switch(
-                    checked = checkHostname,
-                    onCheckedChange = { 
-                        if (!it) {
-                            showWarningDialog = true
-                        } else {
-                            checkHostname = it
-                            scope.launch { repository.setCheckHostname(it) }
-                        }
-                    }
-                )
-            }
-
-            if (showWarningDialog) {
-                AlertDialog(
-                    onDismissRequest = { showWarningDialog = false },
-                    title = { Text("Security Warning") },
-                    text = { Text("Disabling hostname verification makes the connection vulnerable to Man-In-The-Middle (MITM) attacks. Are you sure?") },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            checkHostname = false
-                            scope.launch { repository.setCheckHostname(false) }
-                            showWarningDialog = false
-                        }) {
-                            Text("Disable Anyway", color = MaterialTheme.colorScheme.error)
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showWarningDialog = false }) {
-                            Text("Keep Enabled")
-                        }
-                    }
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text("Enable IPv6", style = MaterialTheme.typography.bodyLarge)
-                    Text("Experimental support", style = MaterialTheme.typography.bodySmall)
-                }
-                Switch(
-                    checked = enableIpv6,
-                    onCheckedChange = { 
-                        enableIpv6 = it
-                        scope.launch { repository.setEnableIpv6(it) }
-                    }
-                )
-            }
-
-            OutlinedCard(
-                onClick = { navController.navigate("dns") },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            SettingsGroup(title = "Network") {
+                SettingsTile(
+                    icon = Icons.Default.NetworkCheck,
+                    title = "MTU",
+                    subtitle = "Current: $mtu",
+                    onClick = { }
                 ) {
-                    Column {
-                        Text(
-                            text = "DNS Configuration",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = "Configure DoH and Bootstrap DNS",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Go"
+                    OutlinedTextField(
+                        value = mtu,
+                        onValueChange = { 
+                            mtu = it
+                            it.toIntOrNull()?.let { value -> scope.launch { repository.setMtu(value) } }
+                        },
+                        modifier = Modifier.width(100.dp),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium
                     )
                 }
-            }
 
-            HorizontalDivider()
-
-            Text(
-                text = "Rules & Updates",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            OutlinedTextField(
-                value = updateUrl,
-                onValueChange = { 
-                    updateUrl = it
-                    scope.launch { repository.setUpdateUrl(it) }
-                },
-                label = { Text("Rules Update URL") },
-                supportingText = { Text("URL to fetch remote rules JSON") },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            OutlinedCard(
-                onClick = { navController.navigate("rules") },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                var showWarningDialog by remember { mutableStateOf(false) }
+                SettingsTile(
+                    icon = Icons.Default.BugReport,
+                    title = "Check Hostname",
+                    subtitle = "Verify SSL certificates",
+                    onClick = { }
                 ) {
-                    Column {
-                        Text(
-                            text = "Manage Rules",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = "Configure Priority 2 Overwrites",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Go"
-                    )
-                }
-            }
-
-            HorizontalDivider()
-
-            Text(
-                text = "Advanced",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            var showLogDropdown by remember { mutableStateOf(false) }
-            Box {
-                OutlinedTextField(
-                    value = logLevel,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Log Level") },
-                    modifier = Modifier.fillMaxWidth(),
-                    trailingIcon = {
-                        IconButton(onClick = { showLogDropdown = true }) {
-                            Icon(androidx.compose.material.icons.Icons.Default.ArrowDropDown, "Select")
-                        }
-                    }
-                )
-                DropdownMenu(
-                    expanded = showLogDropdown,
-                    onDismissRequest = { showLogDropdown = false }
-                ) {
-                    listOf("debug", "info", "warn", "error").forEach { level ->
-                        DropdownMenuItem(
-                            text = { Text(level) },
-                            onClick = {
-                                logLevel = level
-                                scope.launch { repository.setLogLevel(level) }
-                                showLogDropdown = false
+                    Switch(
+                        checked = checkHostname,
+                        onCheckedChange = { 
+                            if (!it) showWarningDialog = true 
+                            else {
+                                checkHostname = it
+                                scope.launch { repository.setCheckHostname(it) }
                             }
-                        )
+                        }
+                    )
+                }
+
+                if (showWarningDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showWarningDialog = false },
+                        title = { Text("Security Warning") },
+                        text = { Text("Disabling hostname verification makes the connection vulnerable to MITM attacks.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                checkHostname = false
+                                scope.launch { repository.setCheckHostname(false) }
+                                showWarningDialog = false
+                            }) { Text("Disable Anyway", color = MaterialTheme.colorScheme.error) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showWarningDialog = false }) { Text("Cancel") }
+                        }
+                    )
+                }
+
+                SettingsTile(
+                    icon = Icons.Default.BugReport,
+                    title = "IPv6 Support",
+                    subtitle = "Enable IPv6 routing",
+                    onClick = { }
+                ) {
+                    Switch(
+                        checked = enableIpv6,
+                        onCheckedChange = { 
+                            enableIpv6 = it
+                            scope.launch { repository.setEnableIpv6(it) }
+                        }
+                    )
+                }
+            }
+
+            SettingsGroup(title = "Rules & DNS") {
+                SettingsTile(
+                    icon = Icons.Default.Dns,
+                    title = "DNS Configuration",
+                    subtitle = "DoH and Bootstrap DNS",
+                    onClick = { navController.navigate("dns") }
+                )
+                
+                SettingsTile(
+                    icon = Icons.AutoMirrored.Filled.Rule,
+                    title = "Traffic Rules",
+                    subtitle = "Manage domain and IP rules",
+                    onClick = { navController.navigate("rules") }
+                )
+
+                SettingsTile(
+                    icon = Icons.Default.Update,
+                    title = "Update URL",
+                    subtitle = updateUrl,
+                    onClick = { }
+                )
+            }
+
+            SettingsGroup(title = "Logging & Debug") {
+                var showLogDropdown by remember { mutableStateOf(false) }
+                SettingsTile(
+                    icon = Icons.Default.BugReport,
+                    title = "Log Level",
+                    subtitle = "Current: ${logLevel.uppercase()}",
+                    onClick = { showLogDropdown = true }
+                ) {
+                    DropdownMenu(
+                        expanded = showLogDropdown,
+                        onDismissRequest = { showLogDropdown = false }
+                    ) {
+                        listOf("debug", "info", "warn", "error").forEach { level ->
+                            DropdownMenuItem(
+                                text = { Text(level.uppercase()) },
+                                onClick = {
+                                    logLevel = level
+                                    scope.launch { repository.setLogLevel(level) }
+                                    showLogDropdown = false
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+        )
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(content = content)
+        }
+    }
+}
+
+@Composable
+fun SettingsTile(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    trailing: @Composable (() -> Unit)? = null
+) {
+    ListItem(
+        modifier = Modifier.clickable { onClick() },
+        leadingContent = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        headlineContent = { Text(title) },
+        supportingContent = { Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        trailingContent = trailing
+    )
 }

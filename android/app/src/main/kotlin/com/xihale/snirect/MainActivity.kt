@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -12,16 +11,24 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,6 +38,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.xihale.snirect.data.model.LogEntry
+import com.xihale.snirect.data.model.LogLevel
 import com.xihale.snirect.data.repository.ConfigRepository
 import com.xihale.snirect.service.SnirectVpnService
 import com.xihale.snirect.service.VpnStatusManager
@@ -136,10 +145,16 @@ class MainViewModel(private val repository: ConfigRepository) : ViewModel() {
 
 class MainActivity : ComponentActivity() {
     companion object {
-        val logBuffer = mutableStateListOf<String>()
+        val logBuffer = mutableStateListOf<LogEntry>()
         fun log(message: String) {
+            val level = when {
+                message.contains("ERROR", true) -> LogLevel.ERROR
+                message.contains("WARN", true) -> LogLevel.WARN
+                message.contains("DEBUG", true) -> LogLevel.DEBUG
+                else -> LogLevel.INFO
+            }
             if (logBuffer.size > 1000) logBuffer.removeAt(0)
-            logBuffer.add(message)
+            logBuffer.add(LogEntry(level = level, message = message))
         }
     }
 
@@ -192,7 +207,7 @@ fun SnirectApp(
     viewModel: MainViewModel
 ) {
     val context = LocalContext.current
-    val statusColor = if (viewModel.isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+    val statusColor = if (viewModel.isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
 
     val vpnLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -219,8 +234,17 @@ fun SnirectApp(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("SNIRECT", fontWeight = FontWeight.Black) },
+            LargeTopAppBar(
+                title = { 
+                    Column {
+                        Text("SNIRECT", fontWeight = FontWeight.Black)
+                        Text(
+                            text = if (viewModel.isRunning) "Service is active" else "Service is idle",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = statusColor
+                        )
+                    }
+                },
                 actions = {
                     IconButton(onClick = { navController.navigate("logs") }) {
                         Icon(Icons.Default.Terminal, contentDescription = "Logs")
@@ -236,53 +260,114 @@ fun SnirectApp(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Box(
-                modifier = Modifier.size(240.dp).padding(16.dp),
-                contentAlignment = Alignment.Center
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = if (viewModel.isRunning) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                )
             ) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    shape = CircleShape,
-                    color = statusColor.copy(alpha = 0.1f),
-                    border = androidx.compose.foundation.BorderStroke(2.dp, statusColor)
-                ) { }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = if (viewModel.isRunning) "ACTIVE" else "IDLE", color = statusColor)
-                    Text(text = viewModel.uploadSpeed, style = MaterialTheme.typography.headlineMedium)
-                    Text(text = viewModel.downloadSpeed, style = MaterialTheme.typography.labelMedium)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Row(
+                Column(
                     modifier = Modifier.padding(24.dp).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column {
-                        Text("VPN Service", style = MaterialTheme.typography.titleMedium)
-                        Text(viewModel.statusText, style = MaterialTheme.typography.bodySmall)
+                    Box(
+                        modifier = Modifier.size(160.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            progress = { if (viewModel.isRunning) 1f else 0f },
+                            modifier = Modifier.fillMaxSize(),
+                            strokeWidth = 8.dp,
+                            trackColor = MaterialTheme.colorScheme.outlineVariant,
+                            color = statusColor,
+                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = statusColor
+                        )
                     }
-                    Switch(checked = viewModel.isRunning, onCheckedChange = { viewModel.toggleVpn(context) })
+                    
+                    Spacer(Modifier.height(24.dp))
+                    
+                    Button(
+                        onClick = { viewModel.toggleVpn(context) },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = MaterialTheme.shapes.medium,
+                        colors = if (viewModel.isRunning) {
+                            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        } else {
+                            ButtonDefaults.buttonColors()
+                        }
+                    ) {
+                        Text(if (viewModel.isRunning) "DEACTIVATE" else "ACTIVATE")
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                SpeedCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Upload",
+                    speed = viewModel.uploadSpeed,
+                    icon = Icons.Default.Speed,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                SpeedCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Download",
+                    speed = viewModel.downloadSpeed,
+                    icon = Icons.Default.Speed,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
 
-            OutlinedButton(
-                onClick = { viewModel.installCert(context) },
-                modifier = Modifier.fillMaxWidth()
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { viewModel.installCert(context) }
             ) {
-                Text("INSTALL CA CERTIFICATE")
+                ListItem(
+                    leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
+                    headlineContent = { Text("HTTPS Decryption") },
+                    supportingContent = { Text("Install CA Certificate to enable SNI modification for HTTPS") },
+                    trailingContent = { Icon(Icons.AutoMirrored.Filled.ArrowForward, null) }
+                )
             }
             
-            Spacer(modifier = Modifier.weight(1f))
-            Text("Go Engine: gVisor/netstack active", style = MaterialTheme.typography.labelSmall)
+            Text(
+                "Core Version: gVisor/2026.02",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+    }
+}
+
+@Composable
+fun SpeedCard(
+    modifier: Modifier = Modifier,
+    title: String,
+    speed: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color
+) {
+    ElevatedCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(title, style = MaterialTheme.typography.labelMedium, color = color)
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(speed, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
     }
 }
