@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+import com.xihale.snirect.util.AppLogger
+
 class SnirectVpnService : VpnService(), EngineCallbacks {
 
     companion object {
@@ -62,15 +64,18 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
     }
 
     private fun startVpn() {
+        AppLogger.i("Starting VPN Service...")
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification("启动中..."))
         
         serviceScope.launch {
             try {
                 setupVpn()
+                AppLogger.i("VPN Setup Complete")
                 VpnStatusManager.updateStatus(true, "ACTIVE")
                 updateNotification("ACTIVE")
             } catch (e: Exception) {
+                AppLogger.e("VPN Start Failed", e)
                 VpnStatusManager.updateStatus(false, "连接失败: ${e.message}")
                 stopVpn()
             }
@@ -78,7 +83,8 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
     }
 
     private fun stopVpn() {
-        try { Core.stopEngine() } catch (e: Exception) {}
+        AppLogger.i("Stopping VPN Service...")
+        try { Core.stopEngine() } catch (e: Exception) { AppLogger.e("Stop Core Error", e) }
         try { vpnInterface?.close() } catch (e: Exception) {}
         vpnInterface = null
         isRunning = false
@@ -129,6 +135,7 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
                 logLevel = logLvl
             )
             val configJson = Json.encodeToString(config)
+            AppLogger.i("Starting core engine...")
             Core.startEngine(fd.toLong(), configJson, this)
         } ?: run {
             stopVpn()

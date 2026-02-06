@@ -1,7 +1,6 @@
 package com.xihale.snirect.data.repository
 
 import android.content.Context
-import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -14,6 +13,7 @@ import com.akuleshov7.ktoml.TomlInputConfig
 import com.akuleshov7.ktoml.TomlOutputConfig
 import com.xihale.snirect.data.model.Rule
 import com.xihale.snirect.data.model.RuleConfig
+import com.xihale.snirect.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -106,7 +106,7 @@ class ConfigRepository(private val context: Context) {
                     localRulesFile.outputStream().use { output -> input.copyTo(output) }
                 }
             } catch (e: Exception) {
-                Log.e("ConfigRepository", "Failed to copy default rules.toml", e)
+                AppLogger.e("Failed to copy default rules.toml", e)
             }
         }
         if (!fetchedRulesFile.exists()) {
@@ -115,7 +115,7 @@ class ConfigRepository(private val context: Context) {
                     fetchedRulesFile.outputStream().use { output -> input.copyTo(output) }
                 }
             } catch (e: Exception) {
-                Log.e("ConfigRepository", "Failed to copy default fetched_rules.toml", e)
+                AppLogger.e("Failed to copy default fetched_rules.toml", e)
             }
         }
     }
@@ -133,7 +133,7 @@ class ConfigRepository(private val context: Context) {
             if (content.isBlank()) return emptyList()
             toml.decodeFromString(RuleConfig.serializer(), content).rules
         } catch (e: Exception) {
-            Log.e("ConfigRepository", "Failed to parse TOML rules from ${file.name}", e)
+            AppLogger.e("Failed to parse TOML rules from ${file.name}", e)
             emptyList()
         }
     }
@@ -152,7 +152,7 @@ class ConfigRepository(private val context: Context) {
             val content = toml.encodeToString(RuleConfig.serializer(), config)
             file.writeText(content)
         } catch (e: Exception) {
-            Log.e("ConfigRepository", "Failed to save TOML rules to ${file.name}", e)
+            AppLogger.e("Failed to save TOML rules to ${file.name}", e)
         }
     }
 
@@ -164,7 +164,7 @@ class ConfigRepository(private val context: Context) {
             saveFetchedRules(rules)
             rules
         } catch (e: Exception) {
-            Log.e("ConfigRepository", "Failed to fetch remote rules", e)
+            AppLogger.e("Failed to fetch remote rules", e)
             throw e
         }
     }

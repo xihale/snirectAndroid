@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,7 +13,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -45,10 +46,9 @@ import com.xihale.snirect.service.SnirectVpnService
 import com.xihale.snirect.service.VpnStatusManager
 import com.xihale.snirect.ui.screens.*
 import com.xihale.snirect.ui.theme.SnirectTheme
+import com.xihale.snirect.util.AppLogger
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 class MainViewModelFactory(private val repository: ConfigRepository) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -129,15 +129,24 @@ class MainViewModel(private val repository: ConfigRepository) : ViewModel() {
 
     fun installCert(context: android.content.Context) {
         try {
+            AppLogger.i("Starting CA certificate export...")
             val certBytes = core.Core.getCACertificate() ?: throw Exception("Go core returned null cert")
+            if (certBytes.isEmpty()) throw Exception("Go core returned empty cert")
+            
+            AppLogger.i("CA cert retrieved (${certBytes.size} bytes)")
+            
             val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
             if (!downloadDir.exists()) downloadDir.mkdirs()
             val file = java.io.File(downloadDir, "snirect_ca.crt")
             file.writeBytes(certBytes)
+            
+            AppLogger.i("CA cert saved to: Download/snirect_ca.crt")
             Toast.makeText(context, "Saved to: Download/snirect_ca.crt", Toast.LENGTH_LONG).show()
+            
             val intent = Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS)
             context.startActivity(intent)
         } catch (e: Exception) {
+            AppLogger.e("CA export failed", e)
             Toast.makeText(context, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
@@ -148,18 +157,29 @@ class MainActivity : ComponentActivity() {
         val logBuffer = mutableStateListOf<LogEntry>()
         fun log(message: String) {
             val level = when {
-                message.contains("ERROR", true) -> LogLevel.ERROR
-                message.contains("WARN", true) -> LogLevel.WARN
-                message.contains("DEBUG", true) -> LogLevel.DEBUG
+                message.contains("[ERROR]", true) || message.contains("ERROR:", true) -> LogLevel.ERROR
+                message.contains("[WARN]", true) || message.contains("WARN:", true) -> LogLevel.WARN
+                message.contains("[DEBUG]", true) || message.contains("DEBUG:", true) -> LogLevel.DEBUG
                 else -> LogLevel.INFO
             }
-            if (logBuffer.size > 1000) logBuffer.removeAt(0)
-            logBuffer.add(LogEntry(level = level, message = message))
+            val cleanMessage = message
+                .replace("[ERROR]", "")
+                .replace("[WARN]", "")
+                .replace("[DEBUG]", "")
+                .replace("[INFO]", "")
+                .trim()
+
+            Handler(Looper.getMainLooper()).post {
+                if (logBuffer.size > 2000) logBuffer.removeAt(0)
+                logBuffer.add(LogEntry(level = level, message = cleanMessage))
+            }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppLogger.i("App Starting...")
+        
         val repository = ConfigRepository(applicationContext)
         val factory = MainViewModelFactory(repository)
         

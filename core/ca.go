@@ -1,4 +1,4 @@
-package ca
+package core
 
 import (
 	"crypto/ecdsa"
@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -160,6 +161,13 @@ func (cm *CertManager) generateCA() error {
 }
 
 func (cm *CertManager) saveCA(certPath, keyPath string) error {
+	if err := os.MkdirAll(filepath.Dir(certPath), 0755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0755); err != nil {
+		return err
+	}
+
 	certOut, err := os.Create(certPath)
 	if err != nil {
 		return err
