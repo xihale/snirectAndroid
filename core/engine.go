@@ -31,13 +31,66 @@ type Rule struct {
 	domainRegex *regexp.Regexp
 }
 
+// Config 核心配置结构
+type Config struct {
+	Rules        []Rule   `json:"rules"`
+	NameServers  []string `json:"nameservers"`
+	BootstrapDNS string   `json:"bootstrap_dns"`
+	CheckHN      bool     `json:"check_hostname"`
+	MTU          int      `json:"mtu"`
+	EnableIPv6   bool     `json:"enable_ipv6"`
+	LogLevel     string   `json:"log_level"`
+}
+
 // Engine 规则引擎单例
 type Engine struct {
-	mu    sync.RWMutex
-	rules []Rule
+	mu     sync.RWMutex
+	rules  []Rule
+	config *Config
 }
 
 var globalEngine = &Engine{}
+
+// InitEngine 初始化引擎配置
+func InitEngine(jsonConfig string) (*Config, error) {
+	var config Config
+	if err := json.Unmarshal([]byte(jsonConfig), &config); err != nil {
+		return nil, fmt.Errorf("config parse error: %v", err)
+	}
+
+	// 预编译规则
+	for i := range config.Rules {
+		r := &config.Rules[i]
+		if err := r.Compile(); err != nil {
+			fmt.Printf("Warning: Rule %d compile failed: %v\n", i, err)
+		}
+	}
+
+	globalEngine.mu.Lock()
+	globalEngine.rules = config.Rules
+	globalEngine.config = &config
+	globalEngine.mu.Unlock()
+
+	return &config, nil
+}
+
+func (r *Rule) Compile() error {
+	switch r.Type {
+	case "cidr":
+		_, ipNet, err := net.ParseCIDR(r.Value)
+		if err != nil {
+			return err
+		}
+		r.ipNet = ipNet
+	case "domain_regex":
+		re, err := regexp.Compile(r.Value)
+		if err != nil {
+			return err
+		}
+		r.domainRegex = re
+	}
+	return nil
+}
 
 // UpdateRules 动态加载并校验规则 (热更新入口)
 func UpdateRules(jsonConfig string) error {
@@ -73,9 +126,8 @@ func UpdateRules(jsonConfig string) error {
 	globalEngine.mu.Lock()
 	globalEngine.rules = newRules
 	globalEngine.mu.Unlock()
-	
-	fmt.Printf("Engine: Loaded %d rules successfully.
-", len(newRules))
+
+	fmt.Printf("Engine: Loaded %d rules successfully.\n", len(newRules))
 	return nil
 }
 

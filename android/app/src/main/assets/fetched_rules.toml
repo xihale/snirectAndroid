@@ -1,0 +1,7 @@
+# Default Fetched Rules (Snapshot)
+# Priority: 1
+# This file will be overwritten by updates.
+
+[[rules]]
+patterns = ["google.com"]
+target_sni = "www.google.com"

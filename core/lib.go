@@ -9,9 +9,20 @@ type EngineCallbacks interface {
 	OnSpeedUpdated(up int64, down int64)
 }
 
-func StartEngine(fd int, config string, cb EngineCallbacks) {
+func StartEngine(fd int, configStr string, cb EngineCallbacks) {
 	fmt.Printf("Snirect Core Starting... FD: %d\n", fd)
-	ts, _ := NewTunStack(fd, cb)
+
+	config, err := InitEngine(configStr)
+	if err != nil {
+		fmt.Printf("Failed to init engine: %v\n", err)
+		// Proceed with empty/default? Or just log.
+	}
+
+	ts, err := NewTunStack(fd, config, cb)
+	if err != nil {
+		fmt.Printf("Failed to create TUN stack: %v\n", err)
+		return
+	}
 	ts.Start()
 }
 

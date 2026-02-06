@@ -20,6 +20,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.xihale.snirect.data.model.Rule
 import com.xihale.snirect.data.repository.ConfigRepository
+import com.xihale.snirect.data.repository.RuleWithSource
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,7 +29,7 @@ fun RulesScreen(
     navController: NavController,
     repository: ConfigRepository
 ) {
-    var rules by remember { mutableStateOf<List<Rule>>(emptyList()) }
+    var rulesWithSource by remember { mutableStateOf<List<RuleWithSource>>(emptyList()) }
     var showDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf<Rule?>(null) }
     val scope = rememberCoroutineScope()
@@ -36,37 +37,47 @@ fun RulesScreen(
     var updateUrl by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        rules = repository.getRules()
+        rulesWithSource = repository.getAllRulesWithSource()
         repository.updateUrl.collect { updateUrl = it }
     }
 
     fun saveRule(newRule: Rule, oldRule: Rule? = null) {
-        val updatedList = rules.toMutableList()
-        if (oldRule != null) {
-            val index = updatedList.indexOf(oldRule)
-            if (index != -1) updatedList[index] = newRule
-        } else {
-            updatedList.add(newRule)
+        scope.launch {
+            val currentLocalRules = repository.getAllRulesWithSource()
+                .filter { it.isOverwrite }
+                .map { it.rule }
+                .toMutableList()
+            
+            if (oldRule != null) {
+                val index = currentLocalRules.indexOf(oldRule)
+                if (index != -1) currentLocalRules[index] = newRule
+            } else {
+                currentLocalRules.add(newRule)
+            }
+            repository.saveLocalRules(currentLocalRules)
+            rulesWithSource = repository.getAllRulesWithSource()
         }
-        rules = updatedList
-        scope.launch { repository.saveRules(updatedList) }
     }
 
     fun deleteRule(rule: Rule) {
-        val updatedList = rules.toMutableList()
-        updatedList.remove(rule)
-        rules = updatedList
-        scope.launch { repository.saveRules(updatedList) }
+        scope.launch {
+            val currentLocalRules = repository.getAllRulesWithSource()
+                .filter { it.isOverwrite }
+                .map { it.rule }
+                .toMutableList()
+            currentLocalRules.remove(rule)
+            repository.saveLocalRules(currentLocalRules)
+            rulesWithSource = repository.getAllRulesWithSource()
+        }
     }
 
     fun fetchRules() {
         scope.launch {
             try {
                 Toast.makeText(context, "Fetching rules...", Toast.LENGTH_SHORT).show()
-                val newRules = repository.fetchRemoteRules(updateUrl)
-                rules = newRules
-                repository.saveRules(newRules)
-                Toast.makeText(context, "Rules updated: ${newRules.size}", Toast.LENGTH_SHORT).show()
+                repository.fetchRemoteRules(updateUrl)
+                rulesWithSource = repository.getAllRulesWithSource()
+                Toast.makeText(context, "Rules updated", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
             }
@@ -100,11 +111,12 @@ fun RulesScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(rules) { rule ->
+            items(rulesWithSource) { item ->
                 RuleItem(
-                    rule = rule,
-                    onEdit = { showEditDialog = rule },
-                    onDelete = { deleteRule(rule) }
+                    rule = item.rule,
+                    isOverwrite = item.isOverwrite,
+                    onEdit = { if (item.isOverwrite) showEditDialog = item.rule },
+                    onDelete = { if (item.isOverwrite) deleteRule(item.rule) }
                 )
             }
         }
@@ -135,10 +147,20 @@ fun RulesScreen(
 @Composable
 fun RuleItem(
     rule: Rule,
+    isOverwrite: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    ElevatedCard(onClick = onEdit) {
+    val cardColor = if (isOverwrite) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    ElevatedCard(
+        onClick = onEdit,
+        colors = CardDefaults.elevatedCardColors(containerColor = cardColor)
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -146,11 +168,19 @@ fun RuleItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = rule.patterns.joinToString(", "),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (isOverwrite) "[Overwrite]" else "[Download]",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isOverwrite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = rule.patterns.joinToString(", "),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 if (rule.targetSni.isNotEmpty()) {
                     Text("SNI: ${rule.targetSni}", style = MaterialTheme.typography.bodyMedium)
                 }
@@ -158,8 +188,10 @@ fun RuleItem(
                     Text("IP: ${rule.targetIp}", style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete")
+            if (isOverwrite) {
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                }
             }
         }
     }

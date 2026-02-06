@@ -18,5 +18,10 @@ data class RuleConfig(
 @Serializable
 data class CoreConfig(
     @SerialName("rules") val rules: List<Rule>,
-    @SerialName("dns_server") val dnsServer: String
+    @SerialName("nameservers") val nameservers: List<String>,
+    @SerialName("bootstrap_dns") val bootstrapDns: String,
+    @SerialName("check_hostname") val checkHostname: Boolean = false,
+    @SerialName("mtu") val mtu: Int = 1500,
+    @SerialName("enable_ipv6") val enableIpv6: Boolean = false,
+    @SerialName("log_level") val logLevel: String = "info"
 )

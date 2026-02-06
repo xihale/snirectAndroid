@@ -62,40 +62,27 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
     }
 
     private fun startVpn() {
-        Log.d("SnirectVpnService", "VPN Service starting")
         createNotificationChannel()
-        
-        startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
+        startForeground(NOTIFICATION_ID, createNotification("启动中..."))
         
         serviceScope.launch {
             try {
                 setupVpn()
-                isRunning = true
-                updateNotification("VPN Connected")
+                VpnStatusManager.updateStatus(true, "ACTIVE")
+                updateNotification("ACTIVE")
             } catch (e: Exception) {
-                Log.e("SnirectVpnService", "Failed to start VPN", e)
+                VpnStatusManager.updateStatus(false, "连接失败: ${e.message}")
                 stopVpn()
             }
         }
     }
 
     private fun stopVpn() {
-        Log.d("SnirectVpnService", "Stopping VPN")
-        try {
-            Core.stopEngine()
-        } catch (e: Exception) {
-            // Ignore
-        }
-        
-        try {
-            vpnInterface?.close()
-        } catch (e: Exception) {
-            Log.e("SnirectVpnService", "Error closing interface", e)
-        }
-        
+        try { Core.stopEngine() } catch (e: Exception) {}
+        try { vpnInterface?.close() } catch (e: Exception) {}
         vpnInterface = null
         isRunning = false
-        
+        VpnStatusManager.updateStatus(false, "已断开")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
@@ -108,26 +95,42 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
     private suspend fun setupVpn() {
         if (vpnInterface != null) return
 
+        val nameservers = repository.nameservers.first()
+        val bootstrapDns = repository.bootstrapDns.first()
+        val checkHostname = repository.checkHostname.first()
+        val mtuValue = repository.mtu.first()
+        val ipv6Enabled = repository.enableIpv6.first()
+        val logLvl = repository.logLevel.first()
+        val rules = repository.getMergedRules()
+
         val builder = Builder()
             .setSession("Snirect")
-            .setMtu(1500)
+            .setMtu(mtuValue)
             .addAddress("10.0.0.1", 24)
             .addRoute("0.0.0.0", 0)
             .addDisallowedApplication("com.android.providers.downloads")
+            
+        if (ipv6Enabled) {
+            builder.addAddress("fd00::1", 128)
+            builder.addRoute("::", 0)
+        }
 
         vpnInterface = builder.establish()
         
         vpnInterface?.let { pfd ->
             val fd = pfd.fd
-            
-            val rules = repository.getRules()
-            val dns = repository.dnsServer.first()
-            val config = CoreConfig(rules, dns)
+            val config = CoreConfig(
+                rules = rules,
+                nameservers = nameservers,
+                bootstrapDns = bootstrapDns,
+                checkHostname = checkHostname,
+                mtu = mtuValue,
+                enableIpv6 = ipv6Enabled,
+                logLevel = logLvl
+            )
             val configJson = Json.encodeToString(config)
-            
             Core.startEngine(fd.toLong(), configJson, this)
         } ?: run {
-            Log.e("SnirectVpnService", "Failed to establish VPN interface")
             stopVpn()
         }
     }
@@ -165,11 +168,16 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
     }
 
     override fun onStatusChanged(status: String?) {
-        Log.i("SnirectGo", "Status: $status")
-        status?.let { updateNotification(it) }
+        status?.let { 
+            updateNotification(it)
+            MainActivity.log("CORE: $it")
+            if (it.contains("Running", true)) {
+                VpnStatusManager.updateStatus(true, "ACTIVE")
+            }
+        }
     }
 
     override fun onSpeedUpdated(up: Long, down: Long) {
-        // Track speed
+        VpnStatusManager.updateSpeed(up, down)
     }
 }
