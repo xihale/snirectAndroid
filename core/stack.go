@@ -10,6 +10,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv6"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
+	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 	"gvisor.dev/gvisor/pkg/waiter"
 	"os"
 )
@@ -23,7 +24,7 @@ type TunStack struct {
 func NewTunStack(fd int, config *Config, cb EngineCallbacks) (*TunStack, error) {
 	s := stack.New(stack.Options{
 		NetworkProtocols:   []stack.NetworkProtocolFactory{ipv4.NewProtocol, ipv6.NewProtocol},
-		TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol},
+		TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol, udp.NewProtocol},
 	})
 
 	mtu := 1500
@@ -43,6 +44,21 @@ func NewTunStack(fd int, config *Config, cb EngineCallbacks) (*TunStack, error) 
 		go handleProxyConnection(gonet.NewTCPConn(&wq, tep), addr.Addr.String()+":443", cb)
 	})
 	s.SetTransportProtocolHandler(tcp.ProtocolNumber, f.HandlePacket)
+
+	uf := udp.NewForwarder(s, func(r *udp.ForwarderRequest) bool {
+		var wq waiter.Queue
+		uep, err := r.CreateEndpoint(&wq)
+		if err != nil {
+			return false
+		}
+		if r.ID().LocalPort == 53 {
+			go handleDNSConnection(gonet.NewUDPConn(&wq, uep), cb)
+			return true
+		}
+		uep.Close()
+		return false
+	})
+	s.SetTransportProtocolHandler(udp.ProtocolNumber, uf.HandlePacket)
 
 	return &TunStack{tunFile: os.NewFile(uintptr(fd), "tun"), s: s, ep: ep}, nil
 }

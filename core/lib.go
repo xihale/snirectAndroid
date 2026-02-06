@@ -12,7 +12,7 @@ type EngineCallbacks interface {
 func StartEngine(fd int, configStr string, cb EngineCallbacks) {
 	fmt.Printf("Snirect Core Starting... FD: %d\n", fd)
 
-	config, err := InitEngine(configStr)
+	config, err := InitEngine(configStr, cb)
 	if err != nil {
 		fmt.Printf("Failed to init engine: %v\n", err)
 		// Proceed with empty/default? Or just log.
