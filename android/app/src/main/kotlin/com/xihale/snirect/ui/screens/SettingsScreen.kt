@@ -16,15 +16,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.xihale.snirect.data.repository.ConfigRepository
+import com.xihale.snirect.ui.theme.AppIcons
 import kotlinx.coroutines.launch
 
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.material.icons.automirrored.filled.Rule
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Update
-import androidx.compose.material.icons.filled.NetworkCheck
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,7 +78,7 @@ fun SettingsScreen(
         ) {
             SettingsGroup(title = "Network") {
                 SettingsTile(
-                    icon = Icons.Default.NetworkCheck,
+                    icon = AppIcons.NetworkCheck,
                     title = "MTU",
                     subtitle = "Current: $mtu",
                     onClick = { }
@@ -101,7 +97,7 @@ fun SettingsScreen(
 
                 var showWarningDialog by remember { mutableStateOf(false) }
                 SettingsTile(
-                    icon = Icons.Default.BugReport,
+                    icon = AppIcons.BugReport,
                     title = "Check Hostname",
                     subtitle = "Verify SSL certificates",
                     onClick = { }
@@ -137,7 +133,7 @@ fun SettingsScreen(
                 }
 
                 SettingsTile(
-                    icon = Icons.Default.BugReport,
+                    icon = AppIcons.BugReport,
                     title = "IPv6 Support",
                     subtitle = "Enable IPv6 routing",
                     onClick = { }
@@ -154,21 +150,21 @@ fun SettingsScreen(
 
             SettingsGroup(title = "Rules & DNS") {
                 SettingsTile(
-                    icon = Icons.Default.Dns,
+                    icon = AppIcons.Dns,
                     title = "DNS Configuration",
                     subtitle = "DoH and Bootstrap DNS",
                     onClick = { navController.navigate("dns") }
                 )
                 
                 SettingsTile(
-                    icon = Icons.AutoMirrored.Filled.Rule,
+                    icon = AppIcons.Rule,
                     title = "Traffic Rules",
                     subtitle = "Manage domain and IP rules",
                     onClick = { navController.navigate("rules") }
                 )
 
                 SettingsTile(
-                    icon = Icons.Default.Update,
+                    icon = AppIcons.Update,
                     title = "Update URL",
                     subtitle = updateUrl,
                     onClick = { }
@@ -178,7 +174,7 @@ fun SettingsScreen(
             SettingsGroup(title = "Logging & Debug") {
                 var showLogDropdown by remember { mutableStateOf(false) }
                 SettingsTile(
-                    icon = Icons.Default.BugReport,
+                    icon = AppIcons.BugReport,
                     title = "Log Level",
                     subtitle = "Current: ${logLevel.uppercase()}",
                     onClick = { showLogDropdown = true }

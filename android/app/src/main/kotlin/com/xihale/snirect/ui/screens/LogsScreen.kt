@@ -23,6 +23,7 @@ import androidx.navigation.NavController
 import com.xihale.snirect.MainActivity
 import com.xihale.snirect.data.model.LogEntry
 import com.xihale.snirect.data.model.LogLevel
+import com.xihale.snirect.ui.theme.AppIcons
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -76,7 +77,7 @@ fun LogsScreen(navController: NavController) {
                             Icon(Icons.Default.Share, contentDescription = "Share")
                         }
                         IconButton(onClick = { logs.clear() }) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = "Clear Logs")
+                            Icon(AppIcons.DeleteSweep, contentDescription = "Clear Logs")
                         }
                     }
                 )
@@ -98,7 +99,8 @@ fun LogsScreen(navController: NavController) {
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                    windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
                 ) { }
 
                 ScrollableTabRow(
@@ -197,9 +199,9 @@ fun LogItem(entry: LogEntry, dateFormat: SimpleDateFormat) {
         },
         leadingContent = {
             val icon = when (entry.level) {
-                LogLevel.ERROR -> Icons.Default.Error
+                LogLevel.ERROR -> Icons.Default.Warning
                 LogLevel.WARN -> Icons.Default.Warning
-                LogLevel.DEBUG -> Icons.Default.BugReport
+                LogLevel.DEBUG -> AppIcons.BugReport
                 else -> Icons.Default.Info
             }
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))

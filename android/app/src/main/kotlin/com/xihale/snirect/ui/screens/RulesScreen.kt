@@ -22,12 +22,12 @@ import androidx.navigation.NavController
 import com.xihale.snirect.data.model.Rule
 import com.xihale.snirect.data.repository.ConfigRepository
 import com.xihale.snirect.data.repository.RuleWithSource
+import com.xihale.snirect.ui.theme.AppIcons
 import kotlinx.coroutines.launch
 
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.ui.text.style.TextOverflow
 
@@ -139,7 +139,7 @@ fun RulesScreen(
                             }
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
                     shape = CircleShape
                 )
             }
@@ -245,7 +245,7 @@ fun RuleItem(
                 Spacer(Modifier.height(4.dp))
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Shield, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+                    Icon(AppIcons.Shield, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
                     Spacer(Modifier.width(4.dp))
                     val sniText = when (rule.targetSni) {
                         null -> "ORIGINAL"

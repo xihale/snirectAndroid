@@ -21,9 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -45,6 +42,7 @@ import com.xihale.snirect.data.repository.ConfigRepository
 import com.xihale.snirect.service.SnirectVpnService
 import com.xihale.snirect.service.VpnStatusManager
 import com.xihale.snirect.ui.screens.*
+import com.xihale.snirect.ui.theme.AppIcons
 import com.xihale.snirect.ui.theme.SnirectTheme
 import com.xihale.snirect.util.AppLogger
 import kotlinx.coroutines.flow.first
@@ -358,7 +356,7 @@ fun SnirectApp(
                 },
                 actions = {
                     IconButton(onClick = { navController.navigate("logs") }) {
-                        Icon(Icons.Default.Terminal, contentDescription = "Logs")
+                        Icon(AppIcons.Terminal, contentDescription = "Logs")
                     }
                     IconButton(onClick = { navController.navigate("settings") }) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -400,7 +398,7 @@ fun SnirectApp(
                             strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                         )
                         Icon(
-                            imageVector = Icons.Default.Shield,
+                            imageVector = AppIcons.Shield,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
                             tint = statusColor
@@ -429,14 +427,14 @@ fun SnirectApp(
                     modifier = Modifier.weight(1f),
                     title = "Upload",
                     speed = viewModel.uploadSpeed,
-                    icon = Icons.Default.Speed,
+                    icon = AppIcons.Speed,
                     color = MaterialTheme.colorScheme.primary
                 )
                 SpeedCard(
                     modifier = Modifier.weight(1f),
                     title = "Download",
                     speed = viewModel.downloadSpeed,
-                    icon = Icons.Default.Speed,
+                    icon = AppIcons.Speed,
                     color = MaterialTheme.colorScheme.tertiary
                 )
             }
@@ -454,9 +452,10 @@ fun SnirectApp(
             }
             
             Text(
-                "Core Version: gVisor/2026.02",
+                "Version: ${BuildConfig.VERSION_NAME}\nCore: gVisor/2026.02",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline
+                color = MaterialTheme.colorScheme.outline,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
     }

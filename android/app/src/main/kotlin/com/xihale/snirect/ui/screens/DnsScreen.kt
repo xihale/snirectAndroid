@@ -14,11 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.xihale.snirect.data.repository.ConfigRepository
+import com.xihale.snirect.ui.theme.AppIcons
 import kotlinx.coroutines.launch
 
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Shield
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,7 +81,7 @@ fun DnsScreen(
                             shape = MaterialTheme.shapes.medium
                         )
                     },
-                    leadingContent = { Icon(Icons.Default.Shield, null, tint = MaterialTheme.colorScheme.primary) }
+                    leadingContent = { Icon(AppIcons.Shield, null, tint = MaterialTheme.colorScheme.primary) }
                 )
             }
 
@@ -96,7 +95,7 @@ fun DnsScreen(
                 nameservers.forEach { server ->
                     ListItem(
                         headlineContent = { Text(server) },
-                        leadingContent = { Icon(Icons.Default.Dns, null, tint = MaterialTheme.colorScheme.secondary) },
+                        leadingContent = { Icon(AppIcons.Dns, null, tint = MaterialTheme.colorScheme.secondary) },
                         trailingContent = {
                             IconButton(onClick = {
                                 val newList = nameservers.toMutableList()

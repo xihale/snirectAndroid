@@ -4,7 +4,7 @@ set -e
 # 1. Compile Go Core
 echo "Compiling Go Core..."
 cd core
-gomobile bind -v -ldflags="-s -w" -target=android -androidapi 21 -o ../android/app/libs/core.aar . >/dev/null || {
+gomobile bind -v -ldflags="-s -w" -trimpath -target=android/arm64 -androidapi 21 -o ../android/app/libs/core.aar . >/dev/null || {
   echo "Go compilation failed"
   exit 1
 }
