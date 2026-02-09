@@ -1,81 +1,138 @@
 package core
 
 import (
+	"encoding/json"
+	"encoding/pem"
 	"fmt"
-	"github.com/xihale/snirect/core/ca"
+	"log"
+	"net"
+	"syscall"
+	"time"
 )
 
 type EngineCallbacks interface {
 	OnStatusChanged(status string)
 	OnSpeedUpdated(up int64, down int64)
+	Protect(fd int) bool
 }
 
-var certManager *ca.CertManager
-var lastCb EngineCallbacks
+func getProtectedDialer() *net.Dialer {
+	return &net.Dialer{
+		Timeout: 10 * time.Second,
+		Control: func(network, address string, c syscall.RawConn) error {
+			globalEngine.mu.RLock()
+			cb := globalEngine.cb
+			globalEngine.mu.RUnlock()
+
+			if cb == nil {
+				return nil
+			}
+			var err error
+			controlErr := c.Control(func(fd uintptr) {
+				if !cb.Protect(int(fd)) {
+					err = fmt.Errorf("failed to protect socket fd %d", fd)
+				} else {
+					log.Printf("VPN: Protected socket fd %d", fd)
+				}
+			})
+			if controlErr != nil {
+				return controlErr
+			}
+			return err
+		},
+	}
+}
+
+var (
+	certManager *CertManager
+	activeStack *TunStack
+	dataDir     string
+)
+
+func SetDataDir(path string) {
+	dataDir = path
+}
+
+func getCAPaths() (string, string) {
+	if dataDir == "" {
+		// Fallback for development/testing
+		return "ca.crt", "ca.key"
+	}
+	return dataDir + "/ca.crt", dataDir + "/ca.key"
+}
 
 func StartEngine(fd int, configStr string, cb EngineCallbacks) {
+	cbMutex.Lock()
 	lastCb = cb
-	if cb != nil {
-		cb.OnStatusChanged("CORE: Starting...")
+	cbMutex.Unlock()
+
+	var tempConfig struct {
+		LogLevel string `json:"log_level"`
+	}
+	if err := json.Unmarshal([]byte(configStr), &tempConfig); err == nil {
+		SetLogLevel(tempConfig.LogLevel)
 	}
 
-	// Use standard Android path (fallback if we can't get it dynamically)
-	caPath := "/data/data/com.xihale.snirect/files/ca.crt"
-	keyPath := "/data/data/com.xihale.snirect/files/ca.key"
+	LogInfo("CORE: Starting... FD=%d", fd)
 
+	caPath, keyPath := getCAPaths()
 	var err error
-	certManager, err = ca.NewCertManager(caPath, keyPath)
+	certManager, err = NewCertManager(caPath, keyPath)
 	if err != nil {
-		if cb != nil {
-			cb.OnStatusChanged(fmt.Sprintf("CORE: CA Init Error: %v", err))
-		}
+		LogError("CORE: CA Init Error: %v", err)
 	} else {
-		if cb != nil {
-			cb.OnStatusChanged("CORE: CA ready")
-		}
+		LogInfo("CORE: CA ready")
 	}
 
 	config, err := InitEngine(configStr, cb)
 	if err != nil {
-		if cb != nil {
-			cb.OnStatusChanged(fmt.Sprintf("CORE: Engine Init Error: %v", err))
-		}
+		LogError("CORE: Engine Init Error: %v", err)
 	}
 
 	ts, err := NewTunStack(fd, config, cb)
 	if err != nil {
-		if cb != nil {
-			cb.OnStatusChanged(fmt.Sprintf("CORE: TUN Setup Failed: %v", err))
-		}
+		LogError("CORE: TUN Setup Failed: %v", err)
 		return
 	}
+	activeStack = ts
 	ts.Start()
 }
 
 func StopEngine() {
-	if lastCb != nil {
-		lastCb.OnStatusChanged("CORE: Stopping...")
+	if activeStack != nil {
+		activeStack.Stop()
+		activeStack = nil
 	}
+
 	if certManager != nil {
 		certManager.Close()
+		certManager = nil
 	}
+
+	cbMutex.Lock()
+	lastCb = nil
+	cbMutex.Unlock()
 }
 
 func GetCACertificate() []byte {
-	fmt.Println("CORE: GetCACertificate called")
-	if certManager != nil && certManager.RootCert != nil {
-		return certManager.RootCert.Raw
-	}
+	LogDebug("CORE: GetCACertificate called")
 
-	caPath := "/data/data/com.xihale.snirect/files/ca.crt"
-	keyPath := "/data/data/com.xihale.snirect/files/ca.key"
-	fmt.Printf("CORE: Loading CA from %s\n", caPath)
+	caPath, keyPath := getCAPaths()
 
-	cm, err := ca.NewCertManager(caPath, keyPath)
-	if err == nil {
+	if certManager == nil || certManager.RootCert == nil {
+		LogInfo("CORE: Loading CA from %s", caPath)
+		cm, err := NewCertManager(caPath, keyPath)
+		if err != nil {
+			LogError("CORE: CA Load Failed: %v", err)
+			return nil
+		}
 		certManager = cm
-		return cm.RootCert.Raw
 	}
-	fmt.Printf("CORE: CA Load Failed: %v\n", err)
+
+	if certManager != nil && certManager.RootCert != nil {
+		LogDebug("CORE: Returning PEM cert")
+		return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certManager.RootCert.Raw})
+	}
+
 	return nil
 }

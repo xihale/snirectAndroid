@@ -53,9 +53,12 @@ fun RulesScreen(
     val filteredRules = remember(rulesWithSource, searchQuery) {
         if (searchQuery.isEmpty()) rulesWithSource
         else rulesWithSource.filter { item ->
-            item.rule.patterns.any { it.contains(searchQuery, ignoreCase = true) } ||
-            item.rule.targetSni.contains(searchQuery, ignoreCase = true) ||
-            item.rule.targetIp.contains(searchQuery, ignoreCase = true)
+            val patterns = item.rule.patterns ?: emptyList()
+            val targetSni = item.rule.targetSni ?: ""
+            val targetIp = item.rule.targetIp ?: ""
+            patterns.any { it.contains(searchQuery, ignoreCase = true) ||
+            targetSni.contains(searchQuery, ignoreCase = true) ||
+            targetIp.contains(searchQuery, ignoreCase = true) }
         }
     }
 
@@ -217,15 +220,16 @@ fun RuleItem(
                     }
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = rule.patterns.firstOrNull() ?: "No pattern",
+                        text = rule.patterns?.firstOrNull() ?: "No pattern",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    if (rule.patterns.size > 1) {
+                    val patternSize = rule.patterns?.size ?: 0
+                    if (patternSize > 1) {
                         Text(
-                            " +${rule.patterns.size - 1}",
+                            " +${patternSize - 1}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline,
                             modifier = Modifier.padding(start = 4.dp)
@@ -235,14 +239,14 @@ fun RuleItem(
                 
                 Spacer(Modifier.height(4.dp))
                 
-                if (rule.targetSni.isNotEmpty()) {
+                if (!rule.targetSni.isNullOrEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Shield, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
                         Spacer(Modifier.width(4.dp))
                         Text("SNI: ${rule.targetSni}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                if (rule.targetIp.isNotEmpty()) {
+                if (!rule.targetIp.isNullOrEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
                         Spacer(Modifier.width(4.dp))

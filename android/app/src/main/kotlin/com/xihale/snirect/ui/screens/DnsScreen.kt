@@ -27,7 +27,7 @@ fun DnsScreen(
     repository: ConfigRepository
 ) {
     var nameservers by remember { mutableStateOf<List<String>>(emptyList()) }
-    var bootstrapDns by remember { mutableStateOf("") }
+    var bootstrapDns by remember { mutableStateOf<List<String>>(emptyList()) }
     
     val scope = rememberCoroutineScope()
     
@@ -71,10 +71,10 @@ fun DnsScreen(
                     headlineContent = { Text("Bootstrap DNS") },
                     supportingContent = {
                         OutlinedTextField(
-                            value = bootstrapDns,
+                            value = bootstrapDns.joinToString(","),
                             onValueChange = { 
-                                bootstrapDns = it
-                                scope.launch { repository.setBootstrapDns(it) }
+                                val list = it.split(",").filter { s -> s.isNotBlank() }
+                                scope.launch { repository.setBootstrapDns(list) }
                             },
                             placeholder = { Text("tls://223.5.5.5") },
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),

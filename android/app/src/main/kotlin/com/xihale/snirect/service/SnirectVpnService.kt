@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.xihale.snirect.MainActivity
 import com.xihale.snirect.data.model.CoreConfig
+import com.xihale.snirect.data.model.LogLevel
 import com.xihale.snirect.data.repository.ConfigRepository
 import core.Core
 import core.EngineCallbacks
@@ -45,20 +46,30 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
         repository = ConfigRepository(this)
     }
 
+    private var isDestroyed = false
+
     override fun onDestroy() {
+        isDestroyed = true
         stopVpn()
         serviceScope.cancel()
         super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        AppLogger.i("VPN Service: onStartCommand called, action=${intent?.action}")
         val action = intent?.action
         if (action == ACTION_STOP) {
+            AppLogger.i("VPN Service: Received STOP action")
             stopVpn()
         } else if (action == ACTION_START) {
+            AppLogger.i("VPN Service: Received START action, isRunning=$isRunning")
             if (!isRunning) {
                 startVpn()
+            } else {
+                AppLogger.w("VPN Service: Already running, ignoring START")
             }
+        } else {
+            AppLogger.w("VPN Service: Unknown action: $action")
         }
         return START_STICKY
     }
@@ -66,7 +77,14 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
     private fun startVpn() {
         AppLogger.i("Starting VPN Service...")
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, createNotification("启动中..."))
+        
+        // Android 14+ requires explicit service type
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, createNotification("启动中..."), 
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, createNotification("启动中..."))
+        }
         
         serviceScope.launch {
             try {
@@ -101,6 +119,7 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
     private suspend fun setupVpn() {
         if (vpnInterface != null) return
 
+        AppLogger.i("VPN Setup: Loading configuration...")
         val nameservers = repository.nameservers.first()
         val bootstrapDns = repository.bootstrapDns.first()
         val checkHostname = repository.checkHostname.first()
@@ -109,22 +128,25 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
         val logLvl = repository.logLevel.first()
         val rules = repository.getMergedRules()
 
+        AppLogger.i("VPN Setup: Config loaded - MTU=$mtuValue, IPv6=$ipv6Enabled, LogLevel=$logLvl, Rules=${rules.size}")
+
         val builder = Builder()
             .setSession("Snirect")
             .setMtu(mtuValue)
             .addAddress("10.0.0.1", 24)
             .addRoute("0.0.0.0", 0)
+            .addDnsServer("10.0.0.2")
+            .addAddress("fd00::1", 128)
+            .addRoute("::", 0)
             .addDisallowedApplication("com.android.providers.downloads")
-            
-        if (ipv6Enabled) {
-            builder.addAddress("fd00::1", 128)
-            builder.addRoute("::", 0)
-        }
-
+        
+        AppLogger.i("VPN Setup: Establishing TUN interface...")
         vpnInterface = builder.establish()
         
         vpnInterface?.let { pfd ->
             val fd = pfd.fd
+            AppLogger.i("VPN Setup: TUN FD=$fd established successfully")
+            
             val config = CoreConfig(
                 rules = rules,
                 nameservers = nameservers,
@@ -135,9 +157,19 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
                 logLevel = logLvl
             )
             val configJson = Json.encodeToString(config)
-            AppLogger.i("Starting core engine...")
-            Core.startEngine(fd.toLong(), configJson, this)
+            AppLogger.i("VPN Setup: Starting core engine with FD=$fd...")
+            AppLogger.d("VPN Setup: Config JSON length=${configJson.length}")
+            
+            try {
+                Core.startEngine(fd.toLong(), configJson, this)
+                AppLogger.i("VPN Setup: Core.startEngine() call completed")
+                isRunning = true
+            } catch (e: Exception) {
+                AppLogger.e("VPN Setup: Core.startEngine() threw exception", e)
+                throw e
+            }
         } ?: run {
+            AppLogger.e("VPN Setup: Failed to establish TUN interface")
             stopVpn()
         }
     }
@@ -175,10 +207,35 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
     }
 
     override fun onStatusChanged(status: String?) {
-        status?.let { 
-            updateNotification(it)
-            MainActivity.log("CORE: $it")
-            if (it.contains("Running", true)) {
+        if (isDestroyed) return
+
+        status?.let { msg ->
+            val level = when {
+                msg.contains("[ERROR]") -> LogLevel.ERROR
+                msg.contains("[WARN]") -> LogLevel.WARN
+                msg.contains("[DEBUG]") -> LogLevel.DEBUG
+                else -> LogLevel.INFO
+            }
+            
+            val cleanMsg = msg
+                .replace("[ERROR]", "")
+                .replace("[WARN]", "")
+                .replace("[DEBUG]", "")
+                .replace("[INFO]", "")
+                .trim()
+            
+            when (level) {
+                LogLevel.ERROR -> AppLogger.e(cleanMsg)
+                LogLevel.WARN -> AppLogger.w(cleanMsg)
+                LogLevel.DEBUG -> AppLogger.d(cleanMsg)
+                LogLevel.INFO -> AppLogger.i(cleanMsg)
+            }
+            
+            if (!isDestroyed) {
+                updateNotification(cleanMsg)
+            }
+            
+            if (cleanMsg.contains("Running", true) || cleanMsg.contains("Starting...", true)) {
                 VpnStatusManager.updateStatus(true, "ACTIVE")
             }
         }
@@ -186,5 +243,13 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
 
     override fun onSpeedUpdated(up: Long, down: Long) {
         VpnStatusManager.updateSpeed(up, down)
+    }
+
+    override fun protect(fd: Long): Boolean {
+        val success = protect(fd.toInt())
+        if (!success) {
+            AppLogger.e("VPN: Failed to protect socket fd=$fd")
+        }
+        return success
     }
 }

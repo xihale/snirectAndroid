@@ -10,21 +10,54 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"time"
 )
 
 func handleProxyConnection(localConn net.Conn, targetAddr string, cb EngineCallbacks) {
-	defer localConn.Close()
+	if localConn == nil {
+		LogError("handleProxyConnection: localConn is nil")
+		return
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			LogError("PANIC in handleProxyConnection: %v", r)
+		}
+		localConn.Close()
+	}()
+
+	if targetAddr == "" {
+		LogWarn("handleProxyConnection: targetAddr is empty")
+		return
+	}
+
 	buf := make([]byte, 4096)
 	localConn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	n, err := localConn.Read(buf)
 	if err != nil {
+		LogDebug("HTTPS handshake read failed for %s: %v", targetAddr, err)
 		return
 	}
 	localConn.SetReadDeadline(time.Time{})
 
-	sni, _ := parseSNI(buf[:n])
+	LogDebug("HTTPS: Read %d bytes from %s, first 16 bytes: %x", n, targetAddr, buf[:min(n, 16)])
+	sni, sniErr := parseSNI(buf[:n])
 	data := buf[:n]
+
+	if sniErr != nil {
+		LogDebug("HTTPS: SNI parse error for %s: %v", targetAddr, sniErr)
+	} else {
+		LogDebug("HTTPS: Parsed SNI '%s' for %s", sni, targetAddr)
+	}
+
+	if sni == "" && targetAddr != "" {
+		host, _, _ := net.SplitHostPort(targetAddr)
+		sni = host
+		if sniErr != nil {
+			LogDebug("SNI parse failed for %s, using host from target: %v", targetAddr, sniErr)
+		}
+	}
 
 	// Peek rule match to see if interception is needed
 	var matchedRule *Rule
@@ -34,60 +67,81 @@ func handleProxyConnection(localConn net.Conn, targetAddr string, cb EngineCallb
 
 	actualTarget := targetAddr
 	var targetSNI string = sni
+	var shouldMITM bool = false
 
 	if matchedRule != nil {
-
-		if matchedRule.TargetSNI != "" {
-			targetSNI = matchedRule.TargetSNI
-			if cb != nil {
-				cb.OnStatusChanged("SNI: " + sni + " -> " + targetSNI)
+		if matchedRule.TargetSNI != nil {
+			targetSNI = *matchedRule.TargetSNI
+			if targetSNI != sni {
+				shouldMITM = true
+				if targetSNI == "" {
+					LogInfo("HTTPS SNI: %s -> <STRIP>", sni)
+				} else {
+					LogInfo("HTTPS SNI: %s -> %s", sni, targetSNI)
+				}
 			}
 		}
-		if matchedRule.TargetIP != "" {
-			host, port, _ := net.SplitHostPort(targetAddr)
-			if port == "" {
+		if matchedRule.TargetIP != nil && *matchedRule.TargetIP != "" {
+			shouldMITM = true
+			host, port, err := net.SplitHostPort(targetAddr)
+			if err != nil {
+				host = targetAddr
 				port = "443"
 			}
-			resolvedIP := matchedRule.TargetIP
-			if net.ParseIP(matchedRule.TargetIP) == nil {
+
+			resolvedIP := *matchedRule.TargetIP
+			if net.ParseIP(*matchedRule.TargetIP) == nil {
 				globalEngine.mu.RLock()
 				resolver := globalEngine.resolver
 				globalEngine.mu.RUnlock()
 				if resolver != nil {
-					if ip, err := resolver.Resolve(context.Background(), matchedRule.TargetIP); err == nil {
+					if ip, err := resolver.Resolve(context.Background(), *matchedRule.TargetIP); err == nil {
 						resolvedIP = ip
 					}
 				}
 			}
-			actualTarget = net.JoinHostPort(resolvedIP, port)
-			if cb != nil {
-				cb.OnStatusChanged("Redirect: " + host + " -> " + resolvedIP)
+
+			if strings.Contains(resolvedIP, ":") && !strings.HasPrefix(resolvedIP, "[") {
+				actualTarget = "[" + resolvedIP + "]:" + port
+			} else {
+				actualTarget = net.JoinHostPort(resolvedIP, port)
 			}
+			LogInfo("HTTPS Redirect: %s -> %s", host, actualTarget)
 		}
+	} else if sni != "" {
+		LogInfo("HTTPS Direct: %s", sni)
 	}
 
-	if matchedRule != nil && matchedRule.TargetSNI != "" {
-
+	if shouldMITM {
 		// MITM Mode
-		// 1. Sign a cert for the ORIGINAL SNI (so client trusts us)
-		// 2. Dial remote with NEW SNI
-
-		// Ensure certManager is available
 		if certManager == nil {
-			// Fallback to direct forwarding if CA not ready
-			forwardDirect(localConn, actualTarget, data)
+			LogError("MITM requested but certManager not available for %s. DROPPING connection to prevent SNI leak.", sni)
 			return
 		}
 
-		// Generate Cert for 'sni' (the hostname the client thinks it's connecting to)
+		if targetSNI == "" {
+			LogDebug("TLS Client: Stripping SNI extension for connection to %s", actualTarget)
+		} else {
+			LogDebug("TLS Client: Setting SNI to '%s' for connection to %s", targetSNI, actualTarget)
+		}
+
 		certBytes, key, err := certManager.SignLeafCert([]string{sni})
 		if err != nil {
-			fmt.Printf("Failed to sign cert: %v\n", err)
+			LogError("Failed to sign cert for %s: %v", sni, err)
+			return
+		}
+		LogDebug("Signed leaf cert for %s, len: %d", sni, len(certBytes))
+
+		certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
+		keyPEM := pemEncodeKey(key)
+		if len(certPEM) == 0 || len(keyPEM) == 0 {
+			LogError("Failed to PEM encode cert or key for %s", sni)
 			return
 		}
 
-		cert, err := tls.X509KeyPair(certBytes, pemEncodeKey(key))
+		cert, err := tls.X509KeyPair(certPEM, keyPEM)
 		if err != nil {
+			LogError("Failed to create X509KeyPair for %s: %v (CertLen: %d, KeyLen: %d)", sni, err, len(certPEM), len(keyPEM))
 			return
 		}
 
@@ -95,60 +149,89 @@ func handleProxyConnection(localConn net.Conn, targetAddr string, cb EngineCallb
 			Certificates: []tls.Certificate{cert},
 		}
 
-		// Wrap local connection (server-side)
-		// We already read 'data' (ClientHello). We need to replay it or use a prefix conn.
-		// Go's tls.Server expects to read the ClientHello itself.
-		// We can construct a PrefixConn that replays 'data'.
 		prefixConn := &PrefixConn{Conn: localConn, Prefix: data}
 		tlsLocal := tls.Server(prefixConn, tlsConfig)
 
 		if err := tlsLocal.Handshake(); err != nil {
-			// Handshake failed (maybe client didn't like our cert, or not TLS)
-			// Fallback? No, just fail.
+			LogError("Client TLS handshake failed for %s: %v", sni, err)
 			return
 		}
 
-		// Dial Remote (client-side)
-		// Use targetSNI for the remote handshake
-		dialer := &net.Dialer{Timeout: 5 * time.Second}
+		dialer := getProtectedDialer()
 		rawRemote, err := dialer.Dial("tcp", actualTarget)
 		if err != nil {
+			LogError("Failed to dial %s: %v", actualTarget, err)
 			return
 		}
 
 		tlsRemote := tls.Client(rawRemote, &tls.Config{
 			ServerName:         targetSNI,
-			InsecureSkipVerify: true, // We accept whatever the backend gives us, usually
+			InsecureSkipVerify: true,
 		})
 
 		if err := tlsRemote.Handshake(); err != nil {
+			LogError("Server TLS handshake failed for %s (SNI: %s): %v", actualTarget, targetSNI, err)
 			rawRemote.Close()
 			return
 		}
 
-		// Bridge
+		LogDebug("MITM tunnel established: %s -> %s (SNI: %s)", sni, actualTarget, targetSNI)
 		go io.Copy(tlsRemote, tlsLocal)
 		io.Copy(tlsLocal, tlsRemote)
 
 	} else {
-		// Direct forwarding (TCP Tunnel)
-		// Used when no SNI modification is required
 		forwardDirect(localConn, actualTarget, data)
 	}
 }
 
-func forwardDirect(localConn net.Conn, targetAddr string, prefixData []byte) {
-	remote, err := net.DialTimeout("tcp", targetAddr, 5*time.Second)
+func handleUDPForwardDirect(localConn net.Conn, targetAddr string) {
+	defer func() {
+		if r := recover(); r != nil {
+			LogError("PANIC in handleUDPForwardDirect: %v", r)
+		}
+		localConn.Close()
+	}()
+
+	dialer := getProtectedDialer()
+	remote, err := dialer.Dial("udp", targetAddr)
 	if err != nil {
 		return
 	}
 	defer remote.Close()
 
-	if len(prefixData) > 0 {
-		remote.Write(prefixData)
-	}
 	go io.Copy(remote, localConn)
 	io.Copy(localConn, remote)
+}
+
+func forwardDirect(localConn net.Conn, targetAddr string, prefixData []byte) {
+	dialer := getProtectedDialer()
+	remote, err := dialer.Dial("tcp", targetAddr)
+	if err != nil {
+		LogError("Failed to connect to %s: %v", targetAddr, err)
+		return
+	}
+	defer remote.Close()
+
+	if len(prefixData) > 0 {
+		if _, err := remote.Write(prefixData); err != nil {
+			LogError("Failed to write prefix data to %s: %v", targetAddr, err)
+			return
+		}
+	}
+
+	done := make(chan error, 2)
+	go func() {
+		_, err := io.Copy(remote, localConn)
+		done <- err
+	}()
+	go func() {
+		_, err := io.Copy(localConn, remote)
+		done <- err
+	}()
+
+	if err := <-done; err != nil {
+		LogDebug("Connection closed for %s: %v", targetAddr, err)
+	}
 }
 
 type PrefixConn struct {
@@ -168,6 +251,13 @@ func (c *PrefixConn) Read(b []byte) (int, error) {
 func pemEncodeKey(key interface{}) []byte {
 	b, _ := x509.MarshalECPrivateKey(key.(*ecdsa.PrivateKey))
 	return pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: b})
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func parseSNI(data []byte) (string, error) {

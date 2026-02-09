@@ -129,22 +129,28 @@ class MainViewModel(private val repository: ConfigRepository) : ViewModel() {
 
     fun installCert(context: android.content.Context) {
         try {
-            AppLogger.i("Starting CA certificate export...")
+            AppLogger.i("Starting CA certificate export using MediaStore...")
             val certBytes = core.Core.getCACertificate() ?: throw Exception("Go core returned null cert")
             if (certBytes.isEmpty()) throw Exception("Go core returned empty cert")
             
-            AppLogger.i("CA cert retrieved (${certBytes.size} bytes)")
-            
-            val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            if (!downloadDir.exists()) downloadDir.mkdirs()
-            val file = java.io.File(downloadDir, "snirect_ca.crt")
-            file.writeBytes(certBytes)
-            
-            AppLogger.i("CA cert saved to: Download/snirect_ca.crt")
-            Toast.makeText(context, "Saved to: Download/snirect_ca.crt", Toast.LENGTH_LONG).show()
-            
-            val intent = Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS)
-            context.startActivity(intent)
+            val resolver = context.contentResolver
+            val contentValues = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "snirect_ca.crt")
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/x-x509-ca-cert")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+            }
+
+            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            uri?.let {
+                resolver.openOutputStream(it)?.use { outputStream ->
+                    outputStream.write(certBytes)
+                }
+                AppLogger.i("CA cert saved to Downloads via MediaStore: $uri")
+                Toast.makeText(context, "Saved to Downloads/snirect_ca.crt", Toast.LENGTH_LONG).show()
+                
+                val intent = Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS)
+                context.startActivity(intent)
+            } ?: throw Exception("Failed to create MediaStore entry")
         } catch (e: Exception) {
             AppLogger.e("CA export failed", e)
             Toast.makeText(context, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -180,11 +186,37 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         AppLogger.i("App Starting...")
         
+        core.Core.setDataDir(filesDir.absolutePath)
+        
         val repository = ConfigRepository(applicationContext)
         val factory = MainViewModelFactory(repository)
         
         setContent {
             SnirectTheme {
+                val viewModel: MainViewModel = viewModel(factory = factory)
+                val context = LocalContext.current
+                
+                LaunchedEffect(Unit) {
+                    AppLogger.i("Auto-activation: Checking VPN status...")
+                    if (!viewModel.isRunning) {
+                        val hasNotifPermission = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                            androidx.core.content.ContextCompat.checkSelfPermission(
+                                context, android.Manifest.permission.POST_NOTIFICATIONS
+                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        } else true
+
+                        if (hasNotifPermission) {
+                            AppLogger.i("Auto-activation: Permission granted, triggering VPN...")
+                            viewModel.startVpn(context)
+                        } else {
+                            AppLogger.i("Auto-activation: Notification permission not granted, waiting for user.")
+                        }
+                    }
+                    
+                    kotlinx.coroutines.delay(5000)
+                    verifyPixiv()
+                }
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -199,7 +231,7 @@ class MainActivity : ComponentActivity() {
                         popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) + fadeOut() }
                     ) {
                         composable("home") {
-                            SnirectApp(navController = navController, viewModel = viewModel(factory = factory))
+                            SnirectApp(navController = navController, viewModel = viewModel)
                         }
                         composable("settings") {
                             SettingsScreen(navController = navController, repository = repository)
@@ -215,6 +247,69 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private fun verifyPixiv() {
+        AppLogger.i("Verification: Sending request to pixiv.net (IPv4 only)...")
+        kotlinx.coroutines.MainScope().launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val caBytes = core.Core.getCACertificate()
+                val sslContext = if (caBytes != null && caBytes.isNotEmpty()) {
+                    val cf = java.security.cert.CertificateFactory.getInstance("X.509")
+                    val ca = cf.generateCertificate(java.io.ByteArrayInputStream(caBytes))
+                    val keyStore = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType()).apply {
+                        load(null, null)
+                        setCertificateEntry("ca", ca)
+                    }
+                    val tmf = javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm()).apply {
+                        init(keyStore)
+                    }
+                    javax.net.ssl.SSLContext.getInstance("TLS").apply {
+                        init(null, tmf.trustManagers, null)
+                    }
+                } else null
+
+                val builder = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .hostnameVerifier { _, _ -> true }
+                    .dns(object : okhttp3.Dns {
+                        override fun lookup(hostname: String): List<java.net.InetAddress> {
+                            val all = okhttp3.Dns.SYSTEM.lookup(hostname)
+                            val ipv4 = all.filter { it is java.net.Inet4Address }
+                            AppLogger.d("DNS lookup for $hostname: found ${all.size} addresses, using ${ipv4.size} IPv4")
+                            return ipv4.ifEmpty { all }
+                        }
+                    })
+
+                // Trust all certificates for verification test
+                val trustAllCerts = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                    override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                    override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+                })
+                val sc = javax.net.ssl.SSLContext.getInstance("SSL")
+                sc.init(null, trustAllCerts, java.security.SecureRandom())
+                builder.sslSocketFactory(sc.socketFactory, trustAllCerts[0] as javax.net.ssl.X509TrustManager)
+
+                val client = builder.build()
+                
+                val request = okhttp3.Request.Builder()
+                    .url("https://www.pixiv.net")
+                    .header("User-Agent", "Snirect-Verifier/1.0")
+                    .build()
+                
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        AppLogger.i("Verification SUCCESS: pixiv.net returned ${response.code}")
+                    } else {
+                        AppLogger.w("Verification FAILED: pixiv.net returned ${response.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                AppLogger.e("Verification ERROR: pixiv.net request failed", e)
             }
         }
     }

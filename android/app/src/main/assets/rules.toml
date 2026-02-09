@@ -1,7 +1,4 @@
-# Default Overwrite Rules
-# Priority: 2 (Highest)
-# You can add your custom rules here.
+[alter_hostname]
 
-[[rules]]
-patterns = ["example.com"]
-target_sni = "example.org"
+
+[hosts]

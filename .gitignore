@@ -53,3 +53,6 @@ google-services.json
 # Go
 core/core.aar
 core/core-sources.jar
+
+# Sisyphus
+.sisyphus/

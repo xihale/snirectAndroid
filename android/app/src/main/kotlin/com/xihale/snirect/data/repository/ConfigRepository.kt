@@ -1,6 +1,7 @@
 package com.xihale.snirect.data.repository
 
 import android.content.Context
+import android.os.Environment
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -13,6 +14,7 @@ import com.akuleshov7.ktoml.TomlInputConfig
 import com.akuleshov7.ktoml.TomlOutputConfig
 import com.xihale.snirect.data.model.Rule
 import com.xihale.snirect.data.model.RuleConfig
+import com.xihale.snirect.data.model.TomlRuleConfig
 import com.xihale.snirect.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -33,7 +35,6 @@ data class RuleWithSource(
 )
 
 class ConfigRepository(private val context: Context) {
-
     private val localRulesFile = File(context.filesDir, "rules.toml")
     private val fetchedRulesFile = File(context.filesDir, "fetched_rules.toml")
     
@@ -55,7 +56,7 @@ class ConfigRepository(private val context: Context) {
         
         const val DEFAULT_NAMESERVERS = "https://dnschina1.soraharu.com/dns-query,https://77.88.8.8/dns-query,https://dns.google/dns-query"
         const val DEFAULT_BOOTSTRAP_DNS = "tls://223.5.5.5"
-        const val DEFAULT_UPDATE_URL = "https://github.com/SpaceTimee/Cealing-Host/raw/refs/heads/main/Cealing-Host.json"
+        const val DEFAULT_UPDATE_URL = "https://github.com/SpaceTimee/Cealing-Host/releases/download/1.1.4.41/Cealing-Host.toml"
     }
 
     // Settings Operations
@@ -64,8 +65,8 @@ class ConfigRepository(private val context: Context) {
         (prefs[KEY_NAMESERVERS] ?: DEFAULT_NAMESERVERS).split(",").filter { it.isNotBlank() }
     }
     
-    val bootstrapDns: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_BOOTSTRAP_DNS] ?: DEFAULT_BOOTSTRAP_DNS
+    val bootstrapDns: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        (prefs[KEY_BOOTSTRAP_DNS] ?: DEFAULT_BOOTSTRAP_DNS).split(",").filter { it.isNotBlank() }
     }
     
     val checkHostname: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -75,13 +76,15 @@ class ConfigRepository(private val context: Context) {
     val updateUrl: Flow<String> = context.dataStore.data.map { it[KEY_UPDATE_URL] ?: DEFAULT_UPDATE_URL }
     val mtu: Flow<Int> = context.dataStore.data.map { it[KEY_MTU] ?: 1500 }
     val enableIpv6: Flow<Boolean> = context.dataStore.data.map { it[KEY_ENABLE_IPV6] ?: false }
-    val logLevel: Flow<String> = context.dataStore.data.map { it[KEY_LOG_LEVEL] ?: "info" }
+    val logLevel: Flow<String> = context.dataStore.data.map { it[KEY_LOG_LEVEL] ?: "debug" }
     val dnsServer: Flow<String> = context.dataStore.data.map { it[KEY_DNS_SERVER] ?: "1.1.1.1" } // Legacy
 
     suspend fun setNameservers(servers: List<String>) = context.dataStore.edit { 
         it[KEY_NAMESERVERS] = servers.joinToString(",") 
     }
-    suspend fun setBootstrapDns(dns: String) = context.dataStore.edit { it[KEY_BOOTSTRAP_DNS] = dns }
+    suspend fun setBootstrapDns(dns: List<String>) = context.dataStore.edit { 
+        it[KEY_BOOTSTRAP_DNS] = dns.joinToString(",") 
+    }
     suspend fun setCheckHostname(check: Boolean) = context.dataStore.edit { it[KEY_CHECK_HOSTNAME] = check }
     
     suspend fun setUpdateUrl(url: String) = context.dataStore.edit { it[KEY_UPDATE_URL] = url }
@@ -100,40 +103,72 @@ class ConfigRepository(private val context: Context) {
     }
 
     private fun copyAssetsIfNeeded() {
-        if (!localRulesFile.exists()) {
-            try {
-                context.assets.open("rules.toml").use { input ->
-                    localRulesFile.outputStream().use { output -> input.copyTo(output) }
-                }
-            } catch (e: Exception) {
-                AppLogger.e("Failed to copy default rules.toml", e)
+        try {
+            context.assets.open("rules.toml").use { input ->
+                localRulesFile.outputStream().use { output -> input.copyTo(output) }
             }
+        } catch (e: Exception) {
+            AppLogger.e("Failed to copy rules.toml", e)
         }
+
         if (!fetchedRulesFile.exists()) {
             try {
                 context.assets.open("fetched_rules.toml").use { input ->
                     fetchedRulesFile.outputStream().use { output -> input.copyTo(output) }
                 }
             } catch (e: Exception) {
-                AppLogger.e("Failed to copy default fetched_rules.toml", e)
+                AppLogger.e("Failed to copy fetched_rules.toml", e)
             }
         }
     }
 
     suspend fun getMergedRules(): List<Rule> = withContext(Dispatchers.IO) {
-        val local = readRulesFromFile(localRulesFile)
-        val fetched = readRulesFromFile(fetchedRulesFile)
+        copyAssetsIfNeeded()
+        val local = readRulesFromFile(localRulesFile).sortedByDescending { !it.targetSni.isNullOrBlank() }
+        val fetched = readRulesFromFile(fetchedRulesFile).sortedByDescending { !it.targetSni.isNullOrBlank() }
         local + fetched
     }
 
     private fun readRulesFromFile(file: File): List<Rule> {
-        if (!file.exists()) return emptyList()
+        if (!file.exists()) {
+            AppLogger.w("Rules file does not exist: ${file.absolutePath}")
+            return emptyList()
+        }
         return try {
-            val content = file.readText()
+            var content = file.readText()
+            
+            // Pre-process TOML to quote keys with dots in [hosts] and [alter_hostname] sections
+            // This is a naive fix for keys like s.yimg.com = "..."
+            val processedLines = content.lines().map { line ->
+                val trimmed = line.trim()
+                if (trimmed.contains(".") && trimmed.contains("=") && !trimmed.startsWith("[") && !trimmed.startsWith("\"") && !trimmed.startsWith("'")) {
+                    val parts = line.split("=", limit = 2)
+                    val key = parts[0].trim()
+                    if (key.contains(".") && !key.startsWith("\"") && !key.startsWith("'")) {
+                        "\"$key\" =${parts[1]}"
+                    } else {
+                        line
+                    }
+                } else {
+                    line
+                }
+            }
+            content = processedLines.joinToString("\n")
+
+            AppLogger.d("Reading rules from ${file.name}, content length: ${content.length}")
             if (content.isBlank()) return emptyList()
-            toml.decodeFromString(RuleConfig.serializer(), content).rules
+            
+            try {
+                val tomlConfig = toml.decodeFromString(TomlRuleConfig.serializer(), content)
+                val rules = tomlConfig.toRulesList()
+                AppLogger.i("Parsed ${rules.size} rules from TOML: ${file.name}")
+                return rules
+            } catch (e: Exception) {
+                AppLogger.w("Failed to parse TOML in ${file.name}: ${e.message}")
+                emptyList()
+            }
         } catch (e: Exception) {
-            AppLogger.e("Failed to parse TOML rules from ${file.name}", e)
+            AppLogger.e("Failed to read rules from ${file.name}", e)
             emptyList()
         }
     }
@@ -158,13 +193,32 @@ class ConfigRepository(private val context: Context) {
 
     suspend fun fetchRemoteRules(urlStr: String): List<Rule> = withContext(Dispatchers.IO) {
         try {
-            val jsonStr = URL(urlStr).readText()
-            val jsonArray = Json.parseToJsonElement(jsonStr).jsonArray
-            val rules = jsonArray.mapNotNull { parseJsonRule(it) }
+            val content = URL(urlStr).readText()
+            
+            val rules = if (urlStr.endsWith(".toml", ignoreCase = true)) {
+                AppLogger.i("Fetching TOML rules from: $urlStr")
+                val tomlConfig = toml.decodeFromString(TomlRuleConfig.serializer(), content)
+                tomlConfig.toRulesList()
+            } else if (urlStr.endsWith(".json", ignoreCase = true)) {
+                AppLogger.i("Fetching JSON rules from: $urlStr")
+                val jsonArray = Json.parseToJsonElement(content).jsonArray
+                jsonArray.mapNotNull { parseJsonRule(it) }
+            } else {
+                try {
+                    val tomlConfig = toml.decodeFromString(TomlRuleConfig.serializer(), content)
+                    tomlConfig.toRulesList()
+                } catch (e: Exception) {
+                    AppLogger.w("TOML parse failed, trying JSON")
+                    val jsonArray = Json.parseToJsonElement(content).jsonArray
+                    jsonArray.mapNotNull { parseJsonRule(it) }
+                }
+            }
+            
             saveFetchedRules(rules)
+            AppLogger.i("Fetched and saved ${rules.size} rules")
             rules
         } catch (e: Exception) {
-            AppLogger.e("Failed to fetch remote rules", e)
+            AppLogger.e("Failed to fetch remote rules from $urlStr", e)
             throw e
         }
     }

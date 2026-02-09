@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -47,11 +48,29 @@ func (r *Resolver) Resolve(ctx context.Context, host string) (string, error) {
 		return host, nil
 	}
 
+	LogDebug("Resolving host: %s", host)
+
+	globalEngine.mu.RLock()
+	rules := globalEngine.rules
+	globalEngine.mu.RUnlock()
+	for _, rule := range rules {
+		for _, p := range rule.Patterns {
+			if MatchPattern(p, host) {
+				if rule.TargetIP != nil && *rule.TargetIP != "" && net.ParseIP(*rule.TargetIP) != nil {
+					LogDebug("DNS Rule Match: %s -> %s", host, *rule.TargetIP)
+					return *rule.TargetIP, nil
+				}
+			}
+		}
+	}
+
 	if ip, ok := r.getCache(host, dns.TypeA); ok {
+		LogDebug("DNS Cache Hit: %s -> %s", host, ip)
 		return ip, nil
 	}
 
 	if r.backend == nil {
+		LogDebug("No DNS backend, using system resolver for %s", host)
 		return r.resolveSystem(ctx, host)
 	}
 
@@ -60,6 +79,7 @@ func (r *Resolver) Resolve(ctx context.Context, host string) (string, error) {
 		return ip, nil
 	}
 
+	LogWarn("Remote DNS failed for %s, falling back to system: %v", host, err)
 	return r.resolveSystem(ctx, host)
 }
 
@@ -81,9 +101,7 @@ func (r *Resolver) resolveRemote(ctx context.Context, host string) (string, erro
 		if a, ok := ans.(*dns.A); ok {
 			ip := a.A.String()
 			r.setCache(host, ip, dns.TypeA, a.Hdr.Ttl)
-			if r.cb != nil {
-				r.cb.OnStatusChanged(fmt.Sprintf("DNS: %s -> %s (%s)", host, ip, addr))
-			}
+			LogInfo("DNS: %s -> %s (%s)", host, ip, addr)
 			return ip, nil
 		}
 	}
@@ -185,14 +203,25 @@ func (b *stdBackend) Exchange(m *dns.Msg) (*dns.Msg, string, error) {
 func newBackend(cfg *Config) dnsBackend {
 	timeout := 5 * time.Second
 	var upstreams []stdUpstream
+
+	for _, bDns := range cfg.BootstrapDNS {
+		if bDns != "" {
+			u, err := parseUpstream(bDns, timeout)
+			if err == nil {
+				upstreams = append(upstreams, u)
+			}
+		}
+	}
+	if len(upstreams) == 0 {
+		u, _ := parseUpstream("223.5.5.5:53", timeout)
+		upstreams = append(upstreams, u)
+	}
+
 	for _, ns := range cfg.NameServers {
 		u, err := parseUpstream(ns, timeout)
 		if err == nil {
 			upstreams = append(upstreams, u)
 		}
-	}
-	if len(upstreams) == 0 {
-		return nil
 	}
 	return &stdBackend{upstreams: upstreams, timeout: timeout}
 }
@@ -202,7 +231,11 @@ func parseUpstream(addr string, timeout time.Duration) (stdUpstream, error) {
 		return &dohUpstream{addr: addr, client: &http.Client{Timeout: timeout}}, nil
 	}
 	if strings.HasPrefix(addr, "tls://") {
-		return &dnsUpstream{addr: strings.TrimPrefix(addr, "tls://"), network: "tcp-tls", timeout: timeout}, nil
+		host := strings.TrimPrefix(addr, "tls://")
+		if !strings.Contains(host, ":") {
+			host += ":853"
+		}
+		return &dnsUpstream{addr: host, network: "tcp-tls", timeout: timeout}, nil
 	}
 	// Default to UDP
 	host := addr
@@ -220,7 +253,11 @@ type dnsUpstream struct {
 
 func (u *dnsUpstream) Address() string { return u.addr }
 func (u *dnsUpstream) Exchange(m *dns.Msg) (*dns.Msg, error) {
-	client := &dns.Client{Net: u.network, Timeout: u.timeout}
+	client := &dns.Client{
+		Net:     u.network,
+		Timeout: u.timeout,
+		Dialer:  getProtectedDialer(),
+	}
 	if u.network == "tcp-tls" {
 		client.TLSConfig = &tls.Config{InsecureSkipVerify: false}
 	}
@@ -235,6 +272,11 @@ type dohUpstream struct {
 
 func (u *dohUpstream) Address() string { return u.addr }
 func (u *dohUpstream) Exchange(m *dns.Msg) (*dns.Msg, error) {
+	if u.client.Transport == nil {
+		u.client.Transport = &http.Transport{
+			DialContext: getProtectedDialer().DialContext,
+		}
+	}
 	data, err := m.Pack()
 	if err != nil {
 		return nil, err
@@ -267,34 +309,91 @@ func (u *dohUpstream) Exchange(m *dns.Msg) (*dns.Msg, error) {
 }
 
 func handleDNSConnection(conn net.Conn, cb EngineCallbacks) {
-	defer conn.Close()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in handleDNSConnection: %v", r)
+		}
+		conn.Close()
+	}()
 
 	buf := make([]byte, 2048)
 	n, err := conn.Read(buf)
 	if err != nil {
+		LogDebug("DNS Connection Read Error: %v", err)
 		return
 	}
 
 	msg := new(dns.Msg)
 	if err := msg.Unpack(buf[:n]); err != nil {
+		LogWarn("DNS Unpack Error: %v", err)
 		return
+	}
+
+	if len(msg.Question) > 0 {
+		qName := strings.TrimSuffix(msg.Question[0].Name, ".")
+		qType := msg.Question[0].Qtype
+		LogDebug("Inbound DNS Query: %s (Type: %d)", qName, qType)
+
+		globalEngine.mu.RLock()
+		rules := globalEngine.rules
+		globalEngine.mu.RUnlock()
+
+		for _, rule := range rules {
+			matched := false
+			for _, p := range rule.Patterns {
+				if MatchPattern(p, qName) {
+					matched = true
+					break
+				}
+			}
+			if matched && rule.TargetIP != nil && *rule.TargetIP != "" {
+				if qType == dns.TypeA {
+					LogInfo("DNS Hijack: %s -> %s (Rule Match)", qName, *rule.TargetIP)
+					reply := new(dns.Msg)
+					reply.SetReply(msg)
+
+					targetIP := *rule.TargetIP
+					if net.ParseIP(targetIP) != nil {
+						rr, err := dns.NewRR(fmt.Sprintf("%s 3600 IN A %s", msg.Question[0].Name, targetIP))
+						if err == nil {
+							reply.Answer = append(reply.Answer, rr)
+							replyData, _ := reply.Pack()
+							conn.Write(replyData)
+							return
+						}
+					}
+				} else if qType == dns.TypeAAAA {
+					// Return empty success for AAAA if we hijack A, to avoid IPv6 issues
+					LogInfo("DNS Hijack (AAAA): %s -> EMPTY (Rule Match)", qName)
+					reply := new(dns.Msg)
+					reply.SetReply(msg)
+					replyData, _ := reply.Pack()
+					conn.Write(replyData)
+					return
+				}
+			}
+		}
 	}
 
 	globalEngine.mu.RLock()
 	resolver := globalEngine.resolver
 	globalEngine.mu.RUnlock()
 
-	if resolver == nil {
+	if resolver == nil || resolver.backend == nil {
+		LogWarn("DNS Resolver or backend not initialized")
 		return
 	}
 
 	reply, _, err := resolver.backend.Exchange(msg)
 	if err != nil {
+		LogError("DNS Exchange Error: %v", err)
 		return
 	}
 
 	replyData, err := reply.Pack()
 	if err == nil {
 		conn.Write(replyData)
+	} else {
+		LogError("DNS Pack Error: %v", err)
 	}
 }

@@ -2,11 +2,13 @@ module github.com/xihale/snirect/core
 
 go 1.25.6
 
-require gvisor.dev/gvisor v0.0.0-20260202191832-0bd9aedd142c
+require (
+	github.com/miekg/dns v1.1.72
+	gvisor.dev/gvisor v0.0.0-20260202191832-0bd9aedd142c
+)
 
 require (
 	github.com/google/btree v1.1.2 // indirect
-	github.com/miekg/dns v1.1.72 // indirect
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
 	golang.org/x/mobile v0.0.0-20260204172633-1dceadbbeea3 // indirect
 	golang.org/x/mod v0.32.0 // indirect
