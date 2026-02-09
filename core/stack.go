@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync/atomic"
 
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -169,6 +170,7 @@ func (ts *TunStack) Start() {
 				return
 			}
 			if n > 0 {
+				atomic.AddInt64(&uploadBytes, int64(n))
 				ver := header.IPVersion(buf)
 				var proto tcpip.NetworkProtocolNumber
 				if ver == 4 {
@@ -210,6 +212,7 @@ func (ts *TunStack) Start() {
 			data := vv.AsSlice()
 
 			if len(data) > 0 {
+				atomic.AddInt64(&downloadBytes, int64(len(data)))
 				ts.tunFile.Write(data)
 			}
 			pkt.DecRef()

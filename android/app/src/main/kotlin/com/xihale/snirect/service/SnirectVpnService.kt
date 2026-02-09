@@ -34,6 +34,9 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
         const val ACTION_STOP = "com.xihale.snirect.STOP"
         private const val NOTIFICATION_CHANNEL_ID = "SnirectVpnStatus"
         private const val NOTIFICATION_ID = 1
+        
+        var isServiceRunning = false
+            private set
     }
 
     private var vpnInterface: ParcelFileDescriptor? = null
@@ -44,12 +47,14 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
     override fun onCreate() {
         super.onCreate()
         repository = ConfigRepository(this)
+        isServiceRunning = true
     }
 
     private var isDestroyed = false
 
     override fun onDestroy() {
         isDestroyed = true
+        isServiceRunning = false
         stopVpn()
         serviceScope.cancel()
         super.onDestroy()
@@ -102,6 +107,7 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
 
     private fun stopVpn() {
         AppLogger.i("Stopping VPN Service...")
+        isServiceRunning = false
         try { Core.stopEngine() } catch (e: Exception) { AppLogger.e("Stop Core Error", e) }
         try { vpnInterface?.close() } catch (e: Exception) {}
         vpnInterface = null
@@ -189,9 +195,11 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
     }
 
     private fun createNotification(text: String): Notification {
-        val notificationIntent = Intent(this, MainActivity::class.java)
+        val notificationIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
+            this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)

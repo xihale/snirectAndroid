@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -47,6 +48,13 @@ var (
 	certManager *CertManager
 	activeStack *TunStack
 	dataDir     string
+
+	uploadBytes   int64
+	downloadBytes int64
+	lastUp        int64
+	lastDown      int64
+	speedTicker   *time.Ticker
+	speedStop     chan struct{}
 )
 
 func SetDataDir(path string) {
@@ -65,6 +73,27 @@ func StartEngine(fd int, configStr string, cb EngineCallbacks) {
 	cbMutex.Lock()
 	lastCb = cb
 	cbMutex.Unlock()
+
+	uploadBytes = 0
+	downloadBytes = 0
+	lastUp = 0
+	lastDown = 0
+	speedStop = make(chan struct{})
+	speedTicker = time.NewTicker(1 * time.Second)
+	go func() {
+		for {
+			select {
+			case <-speedTicker.C:
+				up := atomic.LoadInt64(&uploadBytes)
+				down := atomic.LoadInt64(&downloadBytes)
+				cb.OnSpeedUpdated(up-lastUp, down-lastDown)
+				lastUp = up
+				lastDown = down
+			case <-speedStop:
+				return
+			}
+		}
+	}()
 
 	var tempConfig struct {
 		LogLevel string `json:"log_level"`
@@ -99,6 +128,12 @@ func StartEngine(fd int, configStr string, cb EngineCallbacks) {
 }
 
 func StopEngine() {
+	if speedTicker != nil {
+		speedTicker.Stop()
+		close(speedStop)
+		speedTicker = nil
+	}
+
 	if activeStack != nil {
 		activeStack.Stop()
 		activeStack = nil

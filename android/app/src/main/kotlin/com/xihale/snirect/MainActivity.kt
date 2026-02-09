@@ -70,6 +70,10 @@ class MainViewModel(private val repository: ConfigRepository) : ViewModel() {
     var notificationPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>? = null
 
     init {
+        if (com.xihale.snirect.service.SnirectVpnService.isServiceRunning) {
+            com.xihale.snirect.service.VpnStatusManager.updateStatus(true, "ACTIVE")
+        }
+        
         kotlinx.coroutines.MainScope().launch {
             VpnStatusManager.isRunning.collect { isRunning = it }
         }
