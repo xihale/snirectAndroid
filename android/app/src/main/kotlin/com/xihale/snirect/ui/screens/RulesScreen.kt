@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -54,23 +55,23 @@ fun RulesScreen(
         if (searchQuery.isEmpty()) rulesWithSource
         else rulesWithSource.filter { item ->
             val patterns = item.rule.patterns ?: emptyList()
-            val targetSni = item.rule.targetSni ?: ""
+            val targetSni = item.rule.targetSni
             val targetIp = item.rule.targetIp ?: ""
-            patterns.any { it.contains(searchQuery, ignoreCase = true) ||
+            patterns.any { it.contains(searchQuery, ignoreCase = true) } ||
             targetSni.contains(searchQuery, ignoreCase = true) ||
-            targetIp.contains(searchQuery, ignoreCase = true) }
+            targetIp.contains(searchQuery, ignoreCase = true)
         }
     }
 
     fun saveRule(newRule: Rule, oldRule: Rule? = null) {
         scope.launch {
-            val currentLocalRules = repository.getAllRulesWithSource()
-                .filter { it.isOverwrite }
-                .map { it.rule }
-                .toMutableList()
+            val allLocalItems = repository.getAllRulesWithSource().filter { it.isOverwrite }
+            val currentLocalRules = allLocalItems.map { it.rule }.toMutableList()
             
             if (oldRule != null) {
-                val index = currentLocalRules.indexOf(oldRule)
+                val index = currentLocalRules.indexOfFirst { 
+                    it.patterns == oldRule.patterns && it.targetSni == oldRule.targetSni && it.targetIp == oldRule.targetIp 
+                }
                 if (index != -1) currentLocalRules[index] = newRule
             } else {
                 currentLocalRules.add(newRule)
@@ -82,13 +83,17 @@ fun RulesScreen(
 
     fun deleteRule(rule: Rule) {
         scope.launch {
-            val currentLocalRules = repository.getAllRulesWithSource()
-                .filter { it.isOverwrite }
-                .map { it.rule }
-                .toMutableList()
-            currentLocalRules.remove(rule)
-            repository.saveLocalRules(currentLocalRules)
-            rulesWithSource = repository.getAllRulesWithSource()
+            val allLocalItems = repository.getAllRulesWithSource().filter { it.isOverwrite }
+            val currentLocalRules = allLocalItems.map { it.rule }.toMutableList()
+            
+            val toRemove = currentLocalRules.find { 
+                it.patterns == rule.patterns && it.targetSni == rule.targetSni && it.targetIp == rule.targetIp 
+            }
+            if (toRemove != null) {
+                currentLocalRules.remove(toRemove)
+                repository.saveLocalRules(currentLocalRules)
+                rulesWithSource = repository.getAllRulesWithSource()
+            }
         }
     }
 
@@ -154,7 +159,7 @@ fun RulesScreen(
                 RuleItem(
                     rule = item.rule,
                     isOverwrite = item.isOverwrite,
-                    onEdit = { if (item.isOverwrite) showEditDialog = item.rule },
+                    onEdit = { showEditDialog = item.rule },
                     onDelete = { if (item.isOverwrite) deleteRule(item.rule) }
                 )
             }
@@ -239,12 +244,10 @@ fun RuleItem(
                 
                 Spacer(Modifier.height(4.dp))
                 
-                if (!rule.targetSni.isNullOrEmpty()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Shield, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
-                        Spacer(Modifier.width(4.dp))
-                        Text("SNI: ${rule.targetSni}", style = MaterialTheme.typography.bodySmall)
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Shield, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+                    Spacer(Modifier.width(4.dp))
+                    Text("SNI: ${rule.targetSni.ifEmpty { "STRIP" }}", style = MaterialTheme.typography.bodySmall)
                 }
                 if (!rule.targetIp.isNullOrEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -258,6 +261,13 @@ fun RuleItem(
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
                 }
+            } else {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack, 
+                    contentDescription = null, 
+                    modifier = Modifier.size(16.dp).rotate(180f),
+                    tint = MaterialTheme.colorScheme.outlineVariant
+                )
             }
         }
     }
@@ -282,25 +292,35 @@ fun RuleDialog(
                     value = patterns,
                     onValueChange = { patterns = it },
                     label = { Text("Patterns (one per line)") },
-                    minLines = 3,
+                    placeholder = { Text("*google*\n*.example.com") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
                     maxLines = 5
                 )
                 OutlinedTextField(
                     value = sni,
                     onValueChange = { sni = it },
-                    label = { Text("Target SNI (Optional)") }
+                    label = { Text("Target SNI") },
+                    placeholder = { Text("Leave empty to STRIP") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = ip,
                     onValueChange = { ip = it },
-                    label = { Text("Target IP (Optional)") }
+                    label = { Text("Target IP") },
+                    placeholder = { Text("e.g. 1.1.1.1") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                val patternList = patterns.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
-                onSave(Rule(patternList, sni, ip))
+                val patternList = patterns.split("\n")
+                    .map { it.trim().trim('"', '\'').trimStart('#', '$') }
+                    .filter { it.isNotEmpty() }
+                onSave(Rule(patternList, sni.trim(), ip.trim()))
             }) {
                 Text("Save")
             }

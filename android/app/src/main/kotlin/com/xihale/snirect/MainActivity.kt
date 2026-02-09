@@ -252,65 +252,57 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun verifyPixiv() {
-        AppLogger.i("Verification: Sending request to pixiv.net (IPv4 only)...")
+        AppLogger.i("Verification: Sending request to pixiv.net and google.com...")
         kotlinx.coroutines.MainScope().launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val caBytes = core.Core.getCACertificate()
-                val sslContext = if (caBytes != null && caBytes.isNotEmpty()) {
-                    val cf = java.security.cert.CertificateFactory.getInstance("X.509")
-                    val ca = cf.generateCertificate(java.io.ByteArrayInputStream(caBytes))
-                    val keyStore = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType()).apply {
-                        load(null, null)
-                        setCertificateEntry("ca", ca)
+            val caBytes = core.Core.getCACertificate()
+            
+            val trustAllClient = okhttp3.OkHttpClient.Builder()
+                .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                .hostnameVerifier { _, _ -> true }
+                .sslSocketFactory(createTrustAllSslSocketFactory(), createTrustAllManager())
+                .dns(object : okhttp3.Dns {
+                    override fun lookup(hostname: String): List<java.net.InetAddress> {
+                        val all = okhttp3.Dns.SYSTEM.lookup(hostname)
+                        val ipv4 = all.filter { it is java.net.Inet4Address }
+                        return ipv4.ifEmpty { all }
                     }
-                    val tmf = javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm()).apply {
-                        init(keyStore)
-                    }
-                    javax.net.ssl.SSLContext.getInstance("TLS").apply {
-                        init(null, tmf.trustManagers, null)
-                    }
-                } else null
-
-                val builder = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                    .hostnameVerifier { _, _ -> true }
-                    .dns(object : okhttp3.Dns {
-                        override fun lookup(hostname: String): List<java.net.InetAddress> {
-                            val all = okhttp3.Dns.SYSTEM.lookup(hostname)
-                            val ipv4 = all.filter { it is java.net.Inet4Address }
-                            AppLogger.d("DNS lookup for $hostname: found ${all.size} addresses, using ${ipv4.size} IPv4")
-                            return ipv4.ifEmpty { all }
-                        }
-                    })
-
-                // Trust all certificates for verification test
-                val trustAllCerts = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
-                    override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
-                    override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
-                    override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
                 })
-                val sc = javax.net.ssl.SSLContext.getInstance("SSL")
-                sc.init(null, trustAllCerts, java.security.SecureRandom())
-                builder.sslSocketFactory(sc.socketFactory, trustAllCerts[0] as javax.net.ssl.X509TrustManager)
+                .build()
 
-                val client = builder.build()
-                
-                val request = okhttp3.Request.Builder()
-                    .url("https://www.pixiv.net")
-                    .header("User-Agent", "Snirect-Verifier/1.0")
-                    .build()
-                
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        AppLogger.i("Verification SUCCESS: pixiv.net returned ${response.code}")
-                    } else {
-                        AppLogger.w("Verification FAILED: pixiv.net returned ${response.code}")
-                    }
+            // Verify Pixiv
+            try {
+                val request = okhttp3.Request.Builder().url("https://www.pixiv.net").build()
+                trustAllClient.newCall(request).execute().use { response ->
+                    AppLogger.i("Verification SUCCESS: pixiv.net returned ${response.code}")
                 }
             } catch (e: Exception) {
-                AppLogger.e("Verification ERROR: pixiv.net request failed", e)
+                AppLogger.e("Verification ERROR: pixiv.net failed", e)
             }
+
+            // Verify Google (to trigger cert_verify)
+            try {
+                val request = okhttp3.Request.Builder().url("https://www.google.com").build()
+                trustAllClient.newCall(request).execute().use { response ->
+                    AppLogger.i("Verification SUCCESS: google.com returned ${response.code}")
+                }
+            } catch (e: Exception) {
+                AppLogger.e("Verification ERROR: google.com failed", e)
+            }
+        }
+    }
+
+    private fun createTrustAllSslSocketFactory(): javax.net.ssl.SSLSocketFactory {
+        val sc = javax.net.ssl.SSLContext.getInstance("SSL")
+        sc.init(null, arrayOf(createTrustAllManager()), java.security.SecureRandom())
+        return sc.socketFactory
+    }
+
+    private fun createTrustAllManager(): javax.net.ssl.X509TrustManager {
+        return object : javax.net.ssl.X509TrustManager {
+            override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+            override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+            override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
         }
     }
 }

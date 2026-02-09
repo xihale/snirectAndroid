@@ -1,3 +1,11 @@
+[cert_verify]
+"*google*" = "healthdatanexus.ai"
+"gemini.google.com" = false
+"*gstatic.com" = "healthdatanexus.ai"
+"*youtube*" = "healthdatanexus.ai"
+"*ytimg.com" = "healthdatanexus.ai"
+"*ggpht.com" = "healthdatanexus.ai"
+
 [alter_hostname]
 
 

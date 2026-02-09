@@ -15,6 +15,7 @@ import com.akuleshov7.ktoml.TomlOutputConfig
 import com.xihale.snirect.data.model.Rule
 import com.xihale.snirect.data.model.RuleConfig
 import com.xihale.snirect.data.model.TomlRuleConfig
+import com.xihale.snirect.data.model.CertVerifyRule
 import com.xihale.snirect.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -97,8 +98,8 @@ class ConfigRepository(private val context: Context) {
 
     suspend fun getAllRulesWithSource(): List<RuleWithSource> = withContext(Dispatchers.IO) {
         copyAssetsIfNeeded()
-        val local = readRulesFromFile(localRulesFile).map { RuleWithSource(it, true) }
-        val fetched = readRulesFromFile(fetchedRulesFile).map { RuleWithSource(it, false) }
+        val local = readRulesFromFile(localRulesFile).first.map { RuleWithSource(it, true) }
+        val fetched = readRulesFromFile(fetchedRulesFile).first.map { RuleWithSource(it, false) }
         local + fetched
     }
 
@@ -124,52 +125,88 @@ class ConfigRepository(private val context: Context) {
 
     suspend fun getMergedRules(): List<Rule> = withContext(Dispatchers.IO) {
         copyAssetsIfNeeded()
-        val local = readRulesFromFile(localRulesFile).sortedByDescending { !it.targetSni.isNullOrBlank() }
-        val fetched = readRulesFromFile(fetchedRulesFile).sortedByDescending { !it.targetSni.isNullOrBlank() }
+        val local = readRulesFromFile(localRulesFile).first.sortedByDescending { !it.targetSni.isNullOrBlank() }
+        val fetched = readRulesFromFile(fetchedRulesFile).first.sortedByDescending { !it.targetSni.isNullOrBlank() }
         local + fetched
     }
 
-    private fun readRulesFromFile(file: File): List<Rule> {
+    suspend fun getMergedCertVerify(): List<CertVerifyRule> = withContext(Dispatchers.IO) {
+        copyAssetsIfNeeded()
+        val local = readRulesFromFile(localRulesFile).second
+        val fetched = readRulesFromFile(fetchedRulesFile).second
+        local + fetched
+    }
+
+    private fun readRulesFromFile(file: File): Pair<List<Rule>, List<CertVerifyRule>> {
         if (!file.exists()) {
             AppLogger.w("Rules file does not exist: ${file.absolutePath}")
-            return emptyList()
+            return Pair(emptyList(), emptyList())
         }
         return try {
             var content = file.readText()
             
-            // Pre-process TOML to quote keys with dots in [hosts] and [alter_hostname] sections
-            // This is a naive fix for keys like s.yimg.com = "..."
+            // Pre-process TOML to quote keys with dots and bare boolean/unquoted values
+            var inCertVerify = false
             val processedLines = content.lines().map { line ->
                 val trimmed = line.trim()
-                if (trimmed.contains(".") && trimmed.contains("=") && !trimmed.startsWith("[") && !trimmed.startsWith("\"") && !trimmed.startsWith("'")) {
+                if (trimmed == "[cert_verify]") {
+                    inCertVerify = true
+                    return@map line
+                }
+                if (trimmed.startsWith("[")) {
+                    inCertVerify = false
+                }
+                
+                if (trimmed.contains("=") && !trimmed.startsWith("#")) {
                     val parts = line.split("=", limit = 2)
                     val key = parts[0].trim()
+                    val value = parts[1].trim()
+                    
+                    var newKey = key
+                    var newValue = value
+                    
+                    // Quote key if it contains dots and isn't quoted
                     if (key.contains(".") && !key.startsWith("\"") && !key.startsWith("'")) {
-                        "\"$key\" =${parts[1]}"
-                    } else {
-                        line
+                        newKey = "\"$key\""
                     }
-                } else {
-                    line
+                    
+                    // If in cert_verify, quote bare values (bools, strings without quotes)
+                    if (inCertVerify && !value.startsWith("\"") && !value.startsWith("'") && !value.startsWith("[")) {
+                        newValue = "\"$value\""
+                    }
+                    
+                    if (newKey != key || newValue != value) {
+                        return@map "$newKey =$newValue"
+                    }
                 }
+                line
             }
             content = processedLines.joinToString("\n")
 
             AppLogger.d("Reading rules from ${file.name}, content length: ${content.length}")
-            if (content.isBlank()) return emptyList()
+            if (content.isBlank()) return Pair(emptyList(), emptyList())
             
-            try {
+            return try {
                 val tomlConfig = toml.decodeFromString(TomlRuleConfig.serializer(), content)
                 val rules = tomlConfig.toRulesList()
-                AppLogger.i("Parsed ${rules.size} rules from TOML: ${file.name}")
-                return rules
+                val certVerify = tomlConfig.toCertVerifyList()
+                AppLogger.i("Parsed ${rules.size} rules and ${certVerify.size} cert verifies from TOML (v2): ${file.name}")
+                Pair(rules, certVerify)
             } catch (e: Exception) {
-                AppLogger.w("Failed to parse TOML in ${file.name}: ${e.message}")
-                emptyList()
+                AppLogger.d("TOML v2 parse failed for ${file.name}, trying legacy: ${e.message}")
+                try {
+                    val legacyConfig = toml.decodeFromString(RuleConfig.serializer(), content)
+                    val rules = legacyConfig.getRulesList()
+                    AppLogger.i("Parsed ${rules.size} rules from TOML (legacy): ${file.name}")
+                    Pair(rules, emptyList())
+                } catch (e2: Exception) {
+                    AppLogger.w("Failed to parse TOML in ${file.name}: ${e2.message}")
+                    Pair(emptyList(), emptyList())
+                }
             }
         } catch (e: Exception) {
             AppLogger.e("Failed to read rules from ${file.name}", e)
-            emptyList()
+            Pair(emptyList(), emptyList())
         }
     }
 

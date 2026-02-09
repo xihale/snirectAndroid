@@ -127,8 +127,9 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
         val ipv6Enabled = repository.enableIpv6.first()
         val logLvl = repository.logLevel.first()
         val rules = repository.getMergedRules()
+        val certVerify = repository.getMergedCertVerify()
 
-        AppLogger.i("VPN Setup: Config loaded - MTU=$mtuValue, IPv6=$ipv6Enabled, LogLevel=$logLvl, Rules=${rules.size}")
+        AppLogger.i("VPN Setup: Config loaded - MTU=$mtuValue, IPv6=$ipv6Enabled, LogLevel=$logLvl, Rules=${rules.size}, CertVerify=${certVerify.size}")
 
         val builder = Builder()
             .setSession("Snirect")
@@ -149,6 +150,7 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
             
             val config = CoreConfig(
                 rules = rules,
+                certVerify = certVerify,
                 nameservers = nameservers,
                 bootstrapDns = bootstrapDns,
                 checkHostname = checkHostname,

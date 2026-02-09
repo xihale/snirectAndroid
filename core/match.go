@@ -17,29 +17,17 @@ func MatchPattern(pattern, host string) bool {
 		return false
 	}
 
-	if pattern == "*" || pattern == ".*" {
-		return true
-	}
-
-	if strings.HasPrefix(pattern, "$") {
-		return host == strings.TrimPrefix(pattern, "$")
-	}
+	pattern = strings.TrimLeft(pattern, "#$")
 
 	if strings.HasPrefix(pattern, "*.") {
 		domain := pattern[2:]
-		return host == domain || strings.HasSuffix(host, "."+domain)
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
 	}
 
-	if strings.HasPrefix(pattern, "*") {
-		return strings.HasSuffix(host, pattern[1:])
-	}
-	if strings.HasSuffix(pattern, "*") {
-		return strings.HasPrefix(host, pattern[:len(pattern)-1])
-	}
-
-	if strings.Contains(pattern, "*") {
-		matched, _ := path.Match(pattern, host)
-		return matched
+	if matched, _ := path.Match(pattern, host); matched {
+		return true
 	}
 
 	return host == pattern

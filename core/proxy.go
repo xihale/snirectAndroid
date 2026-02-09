@@ -70,19 +70,16 @@ func handleProxyConnection(localConn net.Conn, targetAddr string, cb EngineCallb
 	var shouldMITM bool = false
 
 	if matchedRule != nil {
+		shouldMITM = true
 		if matchedRule.TargetSNI != nil {
 			targetSNI = *matchedRule.TargetSNI
-			if targetSNI != sni {
-				shouldMITM = true
-				if targetSNI == "" {
-					LogInfo("HTTPS SNI: %s -> <STRIP>", sni)
-				} else {
-					LogInfo("HTTPS SNI: %s -> %s", sni, targetSNI)
-				}
+			if targetSNI == "" {
+				LogInfo("HTTPS SNI: %s -> <STRIP>", sni)
+			} else {
+				LogInfo("HTTPS SNI: %s -> %s", sni, targetSNI)
 			}
 		}
 		if matchedRule.TargetIP != nil && *matchedRule.TargetIP != "" {
-			shouldMITM = true
 			host, port, err := net.SplitHostPort(targetAddr)
 			if err != nil {
 				host = targetAddr
@@ -164,10 +161,42 @@ func handleProxyConnection(localConn net.Conn, targetAddr string, cb EngineCallb
 			return
 		}
 
-		tlsRemote := tls.Client(rawRemote, &tls.Config{
-			ServerName:         targetSNI,
-			InsecureSkipVerify: true,
-		})
+		remoteTLSConfig := &tls.Config{
+			ServerName: targetSNI,
+		}
+
+		verify := globalEngine.MatchCertVerify(sni)
+		if verify != nil {
+			switch v := verify.(type) {
+			case bool:
+				if !v {
+					LogInfo("TLS Client: Verification DISABLED for %s", sni)
+					remoteTLSConfig.InsecureSkipVerify = true
+				}
+			case string:
+				if v == "strict" {
+					LogInfo("TLS Client: Strict verification for %s (using SNI %s)", sni, targetSNI)
+				} else {
+					LogInfo("TLS Client: Loose verification for %s (trusting SNI %s)", sni, v)
+					remoteTLSConfig.InsecureSkipVerify = true
+					remoteTLSConfig.VerifyConnection = func(cs tls.ConnectionState) error {
+						opts := x509.VerifyOptions{
+							DNSName:       v,
+							Intermediates: x509.NewCertPool(),
+						}
+						for _, cert := range cs.PeerCertificates[1:] {
+							opts.Intermediates.AddCert(cert)
+						}
+						_, err := cs.PeerCertificates[0].Verify(opts)
+						return err
+					}
+				}
+			}
+		} else {
+			remoteTLSConfig.InsecureSkipVerify = true
+		}
+
+		tlsRemote := tls.Client(rawRemote, remoteTLSConfig)
 
 		if err := tlsRemote.Handshake(); err != nil {
 			LogError("Server TLS handshake failed for %s (SNI: %s): %v", actualTarget, targetSNI, err)
