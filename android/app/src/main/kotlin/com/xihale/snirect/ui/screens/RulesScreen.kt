@@ -247,13 +247,25 @@ fun RuleItem(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Shield, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
                     Spacer(Modifier.width(4.dp))
-                    Text("SNI: ${rule.targetSni.ifEmpty { "STRIP" }}", style = MaterialTheme.typography.bodySmall)
+                    val sniText = when (rule.targetSni) {
+                        null -> "ORIGINAL"
+                        "" -> "STRIP"
+                        else -> rule.targetSni
+                    }
+                    Text("SNI: $sniText", style = MaterialTheme.typography.bodySmall)
                 }
                 if (!rule.targetIp.isNullOrEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
                         Spacer(Modifier.width(4.dp))
                         Text("IP: ${rule.targetIp}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                if (!rule.certVerify.isNullOrEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Verify: ${rule.certVerify}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -282,6 +294,7 @@ fun RuleDialog(
     var patterns by remember { mutableStateOf(initialRule?.patterns?.joinToString("\n") ?: "") }
     var sni by remember { mutableStateOf(initialRule?.targetSni ?: "") }
     var ip by remember { mutableStateOf(initialRule?.targetIp ?: "") }
+    var verify by remember { mutableStateOf(initialRule?.certVerify ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -313,6 +326,14 @@ fun RuleDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+                OutlinedTextField(
+                    value = verify,
+                    onValueChange = { verify = it },
+                    label = { Text("Cert Verify") },
+                    placeholder = { Text("true/false/domain") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
             }
         },
         confirmButton = {
@@ -320,7 +341,7 @@ fun RuleDialog(
                 val patternList = patterns.split("\n")
                     .map { it.trim().trim('"', '\'').trimStart('#', '$') }
                     .filter { it.isNotEmpty() }
-                onSave(Rule(patternList, sni.trim(), ip.trim()))
+                onSave(Rule(patternList, sni.trim(), ip.trim().ifEmpty { null }, verify.trim().ifEmpty { null }))
             }) {
                 Text("Save")
             }

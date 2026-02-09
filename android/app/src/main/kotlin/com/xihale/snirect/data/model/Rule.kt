@@ -7,13 +7,16 @@ import kotlinx.serialization.json.JsonElement
 @Serializable
 data class Rule(
     @SerialName("patterns") val patterns: List<String>? = null,
-    @SerialName("target_sni") val targetSni: String = "",
-    @SerialName("target_ip") val targetIp: String? = null
+    @SerialName("target_sni") val targetSni: String? = null,
+    @SerialName("target_ip") val targetIp: String? = null,
+    @SerialName("cert_verify") val certVerify: String? = null
 ) {
     // Helper functions to get safe values
     fun patternsOrEmpty(): List<String> = patterns ?: emptyList()
-    fun targetSniOrDefault(): String = targetSni
-    fun targetIpOrDefault(): String = targetIp ?: ""
+    fun targetSniOrDefault(): String = targetSni ?: "" // Treat null as empty for some compat? NO.
+    // If targetSni is null, it means ORIGINAL.
+    // If targetSni is "", it means STRIP.
+    // UI needs to know the difference.
 }
 
 @Serializable

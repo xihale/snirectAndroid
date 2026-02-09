@@ -188,7 +188,11 @@ func handleProxyConnection(localConn net.Conn, targetAddr string, cb EngineCallb
 			ServerName: targetSNI,
 		}
 
-		verify := globalEngine.MatchCertVerify(sni)
+		verify := matchedRule.CertVerify
+		if verify == nil {
+			verify = globalEngine.MatchCertVerify(sni)
+		}
+
 		if verify != nil {
 			switch v := verify.(type) {
 			case bool:
@@ -197,7 +201,11 @@ func handleProxyConnection(localConn net.Conn, targetAddr string, cb EngineCallb
 					remoteTLSConfig.InsecureSkipVerify = true
 				}
 			case string:
-				if v == "strict" {
+				vLower := strings.ToLower(v)
+				if vLower == "false" {
+					LogInfo("TLS Client: Verification DISABLED for %s", sni)
+					remoteTLSConfig.InsecureSkipVerify = true
+				} else if vLower == "strict" || vLower == "true" {
 					LogInfo("TLS Client: Strict verification for %s (using SNI %s)", sni, targetSNI)
 				} else {
 					LogInfo("TLS Client: Loose verification for %s (trusting SNI %s)", sni, v)

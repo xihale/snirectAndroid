@@ -28,24 +28,71 @@ data class TomlRuleConfig(
         for ((pattern, targetSni) in alterHostname) {
             val cleanPattern = pattern.trim('"', '\'').trimStart('#', '$')
             val targetIp = hosts[pattern] ?: ""
+            val verify = certVerify[pattern]
+            
             rules.add(Rule(
                 patterns = listOf(cleanPattern),
                 targetSni = targetSni,
-                targetIp = targetIp
+                targetIp = targetIp.ifEmpty { null },
+                certVerify = verify
             ))
             processedPatterns.add(pattern)
         }
         
-        // Process remaining [hosts] entries not in [alter_hostname]
+        // Process [hosts] entries not in [alter_hostname]
         for ((pattern, targetIp) in hosts) {
             if (pattern !in processedPatterns) {
                 val cleanPattern = pattern.trim('"', '\'').trimStart('#', '$')
+                val verify = certVerify[pattern]
+                
                 rules.add(Rule(
                     patterns = listOf(cleanPattern),
-                    targetSni = "",
-                    targetIp = targetIp
+                    targetSni = "", // Default to strip for hosts-only rules (legacy behavior)
+                    targetIp = targetIp,
+                    certVerify = verify
                 ))
+                processedPatterns.add(pattern)
             }
+        }
+        
+        // Process remaining [cert_verify] entries not in others
+        for ((pattern, verify) in certVerify) {
+             if (pattern !in processedPatterns) {
+                val cleanPattern = pattern.trim('"', '\'').trimStart('#', '$')
+                rules.add(Rule(
+                    patterns = listOf(cleanPattern),
+                    targetSni = null, // KEEP ORIGINAL SNI for cert-verify-only rules
+                    targetIp = null,
+                    certVerify = verify
+                ))
+             }
+        }
+        
+        return rules
+    }
+        }
+        
+        // Process remaining [cert_verify] entries not in others
+        for ((pattern, verify) in certVerify) {
+             if (pattern !in processedPatterns) {
+                val cleanPattern = pattern.trim('"', '\'').trimStart('#', '$')
+                rules.add(Rule(
+                    patterns = listOf(cleanPattern),
+                    targetSni = "", // Assuming strip or original? Actually "" means strip. If we want original, we should handle differently.
+                    // But here we are creating rules. 
+                    // If targetSni is empty string, it STRIPS. 
+                    // If we just want to verify cert, we might not want to strip SNI?
+                    // Currently Rule logic: if match, force MITM.
+                    // If targetSni is "", strip.
+                    // This implies standalone cert_verify rule will STRIP SNI.
+                    // Maybe we should allow null targetSni in Rule to mean "original"?
+                    // Go struct has *string for TargetSNI. nil means original.
+                    // Kotlin Rule has String default "".
+                    // I should change Kotlin Rule to match Go: String? = null
+                    targetIp = null,
+                    certVerify = verify
+                ))
+             }
         }
         
         return rules

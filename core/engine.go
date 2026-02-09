@@ -7,9 +7,10 @@ import (
 )
 
 type Rule struct {
-	Patterns  []string `json:"patterns"`
-	TargetSNI *string  `json:"target_sni"`
-	TargetIP  *string  `json:"target_ip"`
+	Patterns   []string `json:"patterns"`
+	TargetSNI  *string  `json:"target_sni"`
+	TargetIP   *string  `json:"target_ip"`
+	CertVerify any      `json:"cert_verify"`
 }
 
 type CertVerifyRule struct {
@@ -68,7 +69,11 @@ func InitEngine(jsonConfig string, cb EngineCallbacks) (*Config, error) {
 		if r.TargetIP != nil {
 			ipDisplay = *r.TargetIP
 		}
-		LogDebug("Rule[%d]: SNI=%s, IP=%s, Patterns=%v", i, sniDisplay, ipDisplay, r.Patterns)
+		verifyDisplay := "nil"
+		if r.CertVerify != nil {
+			verifyDisplay = fmt.Sprintf("%v", r.CertVerify)
+		}
+		LogDebug("Rule[%d]: SNI=%s, IP=%s, Verify=%s, Patterns=%v", i, sniDisplay, ipDisplay, verifyDisplay, r.Patterns)
 	}
 	for i, r := range config.CertVerify {
 		LogDebug("CertVerify[%d]: Verify=%v, Patterns=%v", i, r.Verify, r.Patterns)
