@@ -189,9 +189,8 @@ class ConfigRepository(private val context: Context) {
             return try {
                 val tomlConfig = toml.decodeFromString(TomlRuleConfig.serializer(), content)
                 val rules = tomlConfig.toRulesList()
-                val certVerify = tomlConfig.toCertVerifyList()
-                AppLogger.i("Parsed ${rules.size} rules and ${certVerify.size} cert verifies from TOML (v2): ${file.name}")
-                Pair(rules, certVerify)
+                AppLogger.i("Parsed ${rules.size} rules from TOML (v2): ${file.name}")
+                Pair(rules, emptyList())
             } catch (e: Exception) {
                 AppLogger.d("TOML v2 parse failed for ${file.name}, trying legacy: ${e.message}")
                 try {

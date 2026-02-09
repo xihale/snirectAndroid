@@ -55,7 +55,7 @@ fun RulesScreen(
         if (searchQuery.isEmpty()) rulesWithSource
         else rulesWithSource.filter { item ->
             val patterns = item.rule.patterns ?: emptyList()
-            val targetSni = item.rule.targetSni
+            val targetSni = item.rule.targetSni ?: ""
             val targetIp = item.rule.targetIp ?: ""
             patterns.any { it.contains(searchQuery, ignoreCase = true) } ||
             targetSni.contains(searchQuery, ignoreCase = true) ||
@@ -263,9 +263,7 @@ fun RuleItem(
                 }
                 if (!rule.certVerify.isNullOrEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CheckCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Verify: ${rule.certVerify}", style = MaterialTheme.typography.bodySmall)
+                        Text("Verify: ${rule.certVerify}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                     }
                 }
             }

@@ -70,45 +70,4 @@ data class TomlRuleConfig(
         
         return rules
     }
-        }
-        
-        // Process remaining [cert_verify] entries not in others
-        for ((pattern, verify) in certVerify) {
-             if (pattern !in processedPatterns) {
-                val cleanPattern = pattern.trim('"', '\'').trimStart('#', '$')
-                rules.add(Rule(
-                    patterns = listOf(cleanPattern),
-                    targetSni = "", // Assuming strip or original? Actually "" means strip. If we want original, we should handle differently.
-                    // But here we are creating rules. 
-                    // If targetSni is empty string, it STRIPS. 
-                    // If we just want to verify cert, we might not want to strip SNI?
-                    // Currently Rule logic: if match, force MITM.
-                    // If targetSni is "", strip.
-                    // This implies standalone cert_verify rule will STRIP SNI.
-                    // Maybe we should allow null targetSni in Rule to mean "original"?
-                    // Go struct has *string for TargetSNI. nil means original.
-                    // Kotlin Rule has String default "".
-                    // I should change Kotlin Rule to match Go: String? = null
-                    targetIp = null,
-                    certVerify = verify
-                ))
-             }
-        }
-        
-        return rules
-    }
-
-    fun toCertVerifyList(): List<CertVerifyRule> {
-        return certVerify.map { (pattern, verifyStr) ->
-            val verifyElement = when (verifyStr.lowercase()) {
-                "true" -> JsonPrimitive(true)
-                "false" -> JsonPrimitive(false)
-                else -> JsonPrimitive(verifyStr)
-            }
-            CertVerifyRule(
-                patterns = listOf(pattern.trim('"', '\'').trimStart('#', '$')),
-                verify = verifyElement
-            )
-        }
-    }
 }

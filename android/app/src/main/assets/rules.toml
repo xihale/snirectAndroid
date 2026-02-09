@@ -1,12 +1,20 @@
-[cert_verify]
-"*google*" = "healthdatanexus.ai"
-"gemini.google.com" = false
-"*gstatic.com" = "healthdatanexus.ai"
-"*youtube*" = "healthdatanexus.ai"
-"*ytimg.com" = "healthdatanexus.ai"
-"*ggpht.com" = "healthdatanexus.ai"
+# Default local rules (User overrides)
+# Priority: High
 
-[alter_hostname]
+[[rules]]
+patterns = ["*google*"]
+target_sni = "www.google.com"
+target_ip = ""
+cert_verify = "www.google.com"
 
+[[rules]]
+patterns = ["*duckduckgo*"]
+target_sni = "" # Strip SNI
+target_ip = ""
+cert_verify = false
 
-[hosts]
+[[rules]]
+patterns = ["*pixiv.net", "pximg.net"]
+target_sni = "www.pixiv.net"
+target_ip = ""
+cert_verify = "www.pixiv.net"
