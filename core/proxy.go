@@ -231,6 +231,14 @@ func handleProxyConnection(localConn net.Conn, targetAddr string, cb EngineCallb
 
 		if err := tlsRemote.Handshake(); err != nil {
 			LogError("Server TLS handshake failed for %s (SNI: %s): %v", actualTarget, targetSNI, err)
+			state := tlsRemote.ConnectionState()
+			if len(state.PeerCertificates) > 0 {
+				cert := state.PeerCertificates[0]
+				LogError("Remote Certificate details: Subject='%s', Issuer='%s', DNSNames=%v, NotAfter=%s",
+					cert.Subject, cert.Issuer, cert.DNSNames, cert.NotAfter)
+			} else {
+				LogError("No remote certificate received from %s (Handshake aborted by server or before cert exchange)", actualTarget)
+			}
 			rawRemote.Close()
 			return
 		}
