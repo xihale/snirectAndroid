@@ -452,7 +452,7 @@ fun SnirectApp(
             }
             
             Text(
-                "Version: ${BuildConfig.VERSION_NAME}\nCore: gVisor/2026.02",
+                "Version: ${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center

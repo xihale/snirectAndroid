@@ -4,6 +4,18 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.serialization'
 }
 
+// 动态从 Git Tag 获取版本名
+def getGitVersionName(project) {
+    try {
+        return project.providers.exec {
+            workingDir project.rootProject.projectDir.parentFile
+            commandLine 'bash', 'git_version.sh'
+        }.standardOutput.asText.get().trim()
+    } catch (Exception e) {
+        return "0.0.0-fallback"
+    }
+}
+
 android {
     namespace 'com.xihale.snirect'
     compileSdk 36
@@ -14,17 +26,7 @@ android {
         targetSdk 36
         versionCode 1
         
-        // 动态从 Git Tag 获取版本名
-        def gitTag = "0.0.1-unknown"
-        try {
-            def stdout = new ByteArrayOutputStream()
-            exec {
-                commandLine 'git', 'describe', '--tags', '--always', '--dirty'
-                standardOutput = stdout
-            }
-            gitTag = stdout.toString().trim()
-        } catch (ignored) {}
-        versionName gitTag
+        versionName getGitVersionName(project)
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
