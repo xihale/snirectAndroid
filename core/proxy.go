@@ -104,6 +104,29 @@ func handleProxyConnection(localConn net.Conn, targetAddr string, cb EngineCallb
 				actualTarget = net.JoinHostPort(resolvedIP, port)
 			}
 			LogInfo("HTTPS Redirect: %s -> %s", host, actualTarget)
+		} else {
+			// No explicit TargetIP, but we matched a rule.
+			// Re-resolve the SNI using trusted DNS to bypass potential DNS pollution.
+			globalEngine.mu.RLock()
+			resolver := globalEngine.resolver
+			globalEngine.mu.RUnlock()
+			if resolver != nil {
+				LogDebug("Re-resolving SNI '%s' using trusted DNS", sni)
+				if ip, err := resolver.Resolve(context.Background(), sni); err == nil {
+					_, port, err := net.SplitHostPort(targetAddr)
+					if err != nil {
+						port = "443"
+					}
+					if strings.Contains(ip, ":") && !strings.HasPrefix(ip, "[") {
+						actualTarget = "[" + ip + "]:" + port
+					} else {
+						actualTarget = net.JoinHostPort(ip, port)
+					}
+					LogInfo("HTTPS Re-resolved: %s -> %s (Trusted DNS)", sni, actualTarget)
+				} else {
+					LogWarn("Failed to re-resolve '%s': %v. Using original IP.", sni, err)
+				}
+			}
 		}
 	} else if sni != "" {
 		LogInfo("HTTPS Direct: %s", sni)
