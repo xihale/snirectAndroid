@@ -54,5 +54,13 @@ google-services.json
 core/core.aar
 core/core-sources.jar
 
+# Go mobile build artifacts (Android)
+android/app/libs/*.aar
+android/app/libs/*.jar
+android/app/libs/jni/
+
+# Android release outputs
+android/app/release/
+
 # Sisyphus
 .sisyphus/
