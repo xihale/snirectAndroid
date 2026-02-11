@@ -34,6 +34,8 @@ fun SettingsScreen(
     var enableIpv6 by remember { mutableStateOf(false) }
     var checkHostname by remember { mutableStateOf(false) }
     var logLevel by remember { mutableStateOf("info") }
+    var activateOnStartup by remember { mutableStateOf(true) }
+    var activateOnBoot by remember { mutableStateOf(false) }
     
     val scope = rememberCoroutineScope()
     
@@ -54,6 +56,12 @@ fun SettingsScreen(
     }
     LaunchedEffect(Unit) {
         repository.logLevel.collect { logLevel = it }
+    }
+    LaunchedEffect(Unit) {
+        repository.activateOnStartup.collect { activateOnStartup = it }
+    }
+    LaunchedEffect(Unit) {
+        repository.activateOnBoot.collect { activateOnBoot = it }
     }
 
     Scaffold(
@@ -143,6 +151,38 @@ fun SettingsScreen(
                         onCheckedChange = { 
                             enableIpv6 = it
                             scope.launch { repository.setEnableIpv6(it) }
+                        }
+                    )
+                }
+            }
+
+            SettingsGroup(title = "Automation") {
+                SettingsTile(
+                    icon = AppIcons.Terminal,
+                    title = "Active on App Start",
+                    subtitle = "Automatically start VPN when opening app",
+                    onClick = { }
+                ) {
+                    Switch(
+                        checked = activateOnStartup,
+                        onCheckedChange = {
+                            activateOnStartup = it
+                            scope.launch { repository.setActivateOnStartup(it) }
+                        }
+                    )
+                }
+
+                SettingsTile(
+                    icon = AppIcons.Update,
+                    title = "Active on Boot",
+                    subtitle = "Automatically start VPN on device startup",
+                    onClick = { }
+                ) {
+                    Switch(
+                        checked = activateOnBoot,
+                        onCheckedChange = {
+                            activateOnBoot = it
+                            scope.launch { repository.setActivateOnBoot(it) }
                         }
                     )
                 }

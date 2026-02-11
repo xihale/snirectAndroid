@@ -66,12 +66,8 @@ class MainViewModel(private val repository: ConfigRepository) : ViewModel() {
 
     var vpnPermissionLauncher: androidx.activity.result.ActivityResultLauncher<Intent>? = null
     var notificationPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>? = null
-
+    
     init {
-        if (com.xihale.snirect.service.SnirectVpnService.isServiceRunning) {
-            com.xihale.snirect.service.VpnStatusManager.updateStatus(true, "ACTIVE")
-        }
-        
         kotlinx.coroutines.MainScope().launch {
             VpnStatusManager.isRunning.collect { isRunning = it }
         }
@@ -200,7 +196,8 @@ class MainActivity : ComponentActivity() {
                 
                 LaunchedEffect(Unit) {
                     AppLogger.i("Auto-activation: Checking VPN status...")
-                    if (!viewModel.isRunning) {
+                    val shouldActivate = repository.activateOnStartup.first()
+                    if (shouldActivate && !viewModel.isRunning) {
                         val hasNotifPermission = if (android.os.Build.VERSION.SDK_INT >= 33) {
                             androidx.core.content.ContextCompat.checkSelfPermission(
                                 context, android.Manifest.permission.POST_NOTIFICATIONS
@@ -213,6 +210,8 @@ class MainActivity : ComponentActivity() {
                         } else {
                             AppLogger.i("Auto-activation: Notification permission not granted, waiting for user.")
                         }
+                    } else {
+                        AppLogger.i("Auto-activation: Skipped (shouldActivate=$shouldActivate, isRunning=${viewModel.isRunning})")
                     }
                     
                     kotlinx.coroutines.delay(5000)

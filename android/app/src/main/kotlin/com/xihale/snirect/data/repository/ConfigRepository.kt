@@ -54,6 +54,8 @@ class ConfigRepository(private val context: Context) {
         val KEY_ENABLE_IPV6 = booleanPreferencesKey("enable_ipv6")
         val KEY_LOG_LEVEL = stringPreferencesKey("log_level")
         val KEY_DNS_SERVER = stringPreferencesKey("dns_server") // Legacy/Fallback
+        val KEY_ACTIVATE_ON_STARTUP = booleanPreferencesKey("activate_on_startup")
+        val KEY_ACTIVATE_ON_BOOT = booleanPreferencesKey("activate_on_boot")
         
         const val DEFAULT_NAMESERVERS = "https://dnschina1.soraharu.com/dns-query,https://77.88.8.8/dns-query,https://dns.google/dns-query"
         const val DEFAULT_BOOTSTRAP_DNS = "tls://223.5.5.5"
@@ -79,6 +81,8 @@ class ConfigRepository(private val context: Context) {
     val enableIpv6: Flow<Boolean> = context.dataStore.data.map { it[KEY_ENABLE_IPV6] ?: false }
     val logLevel: Flow<String> = context.dataStore.data.map { it[KEY_LOG_LEVEL] ?: "debug" }
     val dnsServer: Flow<String> = context.dataStore.data.map { it[KEY_DNS_SERVER] ?: "1.1.1.1" } // Legacy
+    val activateOnStartup: Flow<Boolean> = context.dataStore.data.map { it[KEY_ACTIVATE_ON_STARTUP] ?: true }
+    val activateOnBoot: Flow<Boolean> = context.dataStore.data.map { it[KEY_ACTIVATE_ON_BOOT] ?: false }
 
     suspend fun setNameservers(servers: List<String>) = context.dataStore.edit { 
         it[KEY_NAMESERVERS] = servers.joinToString(",") 
@@ -93,6 +97,8 @@ class ConfigRepository(private val context: Context) {
     suspend fun setEnableIpv6(enable: Boolean) = context.dataStore.edit { it[KEY_ENABLE_IPV6] = enable }
     suspend fun setLogLevel(level: String) = context.dataStore.edit { it[KEY_LOG_LEVEL] = level }
     suspend fun setDnsServer(dns: String) = context.dataStore.edit { it[KEY_DNS_SERVER] = dns }
+    suspend fun setActivateOnStartup(enable: Boolean) = context.dataStore.edit { it[KEY_ACTIVATE_ON_STARTUP] = enable }
+    suspend fun setActivateOnBoot(enable: Boolean) = context.dataStore.edit { it[KEY_ACTIVATE_ON_BOOT] = enable }
 
     // Rules Operations
 
