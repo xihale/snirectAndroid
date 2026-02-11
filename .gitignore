@@ -37,7 +37,8 @@ captures/
 .idea/
 *.iws
 *.ipr
-*.xml
+# *.xml - Removed to allow tracking Android manifest and resource files
+
 
 # Keystore files
 *.jks

@@ -338,6 +338,22 @@ fun SnirectApp(
     LaunchedEffect(Unit) {
         viewModel.vpnPermissionLauncher = vpnLauncher
         viewModel.notificationPermissionLauncher = notifLauncher
+        
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    context, android.Manifest.permission.POST_NOTIFICATIONS
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                AppLogger.i("Startup: Requesting notification permission")
+                notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        
+        val vpnIntent = android.net.VpnService.prepare(context)
+        if (vpnIntent != null) {
+            AppLogger.i("Startup: Requesting VPN permission")
+            vpnLauncher.launch(vpnIntent)
+        }
     }
 
     Scaffold(

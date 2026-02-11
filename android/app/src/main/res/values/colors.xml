@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- M3 Light Teal -->
+    <color name="ic_launcher_background">#BCEEEA</color>
+    <!-- M3 Dark Teal -->
+    <color name="ic_launcher_foreground_color">#006A6A</color>
+</resources>
