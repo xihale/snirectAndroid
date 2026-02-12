@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -176,8 +177,53 @@ func GetCACertificate() []byte {
 	return nil
 }
 
-func FetchRemote(urlStr string, targetSNI string, targetIP string) (string, error) {
-	LogInfo("CORE: FetchRemote called for %s (SNI: %s, IP: %s)", urlStr, targetSNI, targetIP)
+func parseURLHostname(urlStr string) (string, error) {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return "", err
+	}
+	hostname := u.Hostname()
+	if hostname == "" {
+		return "", fmt.Errorf("no hostname found in URL")
+	}
+	return hostname, nil
+}
+
+func FetchRemote(urlStr string) (string, error) {
+	LogInfo("CORE: FetchRemote called for %s", urlStr)
+
+	// Parse URL to extract hostname
+	var hostname string
+	var targetSNI, targetIP string
+
+	// Extract hostname from URL
+	if u, err := parseURLHostname(urlStr); err == nil {
+		hostname = u
+		LogDebug("FetchRemote: Extracted hostname %s", hostname)
+	} else {
+		LogError("FetchRemote: Failed to parse hostname from %s: %v", urlStr, err)
+		return "", fmt.Errorf("invalid URL: %v", err)
+	}
+
+	// Try to find matching rule via globalEngine
+	rule := globalEngine.Match(hostname)
+	if rule != nil {
+		// Apply rule's SNI and IP overrides if they exist
+		if rule.TargetSNI != nil {
+			targetSNI = *rule.TargetSNI
+			LogInfo("FetchRemote: Using rule SNI: %s", targetSNI)
+		} else {
+			targetSNI = hostname
+		}
+		if rule.TargetIP != nil {
+			targetIP = *rule.TargetIP
+			LogInfo("FetchRemote: Using rule IP: %s", targetIP)
+		}
+	} else {
+		// No matching rule, use original hostname
+		targetSNI = hostname
+		LogDebug("FetchRemote: No matching rule, using original hostname for SNI")
+	}
 
 	dialer := getProtectedDialer()
 

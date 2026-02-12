@@ -48,22 +48,12 @@ fun RulesScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var updateUrl by remember { mutableStateOf("") }
-    var updateSni by remember { mutableStateOf("") }
-    var updateIp by remember { mutableStateOf("") }
     
     var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         rulesWithSource = repository.getAllRulesWithSource()
         repository.updateUrl.collect { updateUrl = it }
-    }
-    
-    LaunchedEffect(Unit) {
-        repository.updateSni.collect { updateSni = it }
-    }
-    
-    LaunchedEffect(Unit) {
-        repository.updateIp.collect { updateIp = it }
     }
 
     val filteredRules = remember(rulesWithSource, searchQuery) {
@@ -79,20 +69,20 @@ fun RulesScreen(
     }
 
     fun saveRule(newRule: Rule, oldRule: Rule? = null) {
-        scope.launch {
-            val allLocalItems = repository.getAllRulesWithSource().filter { it.isOverwrite }
-            val currentLocalRules = allLocalItems.map { it.rule }.toMutableList()
-            
-            if (oldRule != null) {
-                val index = currentLocalRules.indexOfFirst { 
-                    it.patterns == oldRule.patterns && it.targetSni == oldRule.targetSni && it.targetIp == oldRule.targetIp 
-                }
-                if (index != -1) currentLocalRules[index] = newRule
-            } else {
-                currentLocalRules.add(newRule)
-            }
+         scope.launch {
+             val allLocalItems = repository.getAllRulesWithSource().filter { it.isOverwrite }
+             val currentLocalRules = allLocalItems.map { it.rule }.toMutableList()
+             
+             if (oldRule != null) {
+                 val index = currentLocalRules.indexOfFirst { 
+                     it.patterns == oldRule.patterns && it.targetSni == oldRule.targetSni && it.targetIp == oldRule.targetIp 
+                 }
+                 if (index != -1) currentLocalRules[index] = newRule
+             } else {
+                 currentLocalRules.add(newRule)
+             }
             repository.saveLocalRules(currentLocalRules)
-            rulesWithSource = repository.getAllRulesWithSource()
+            rulesWithSource = repository.getAllRulesWithSource().toList()
         }
     }
 
@@ -107,7 +97,7 @@ fun RulesScreen(
             if (toRemove != null) {
                 currentLocalRules.remove(toRemove)
                 repository.saveLocalRules(currentLocalRules)
-                rulesWithSource = repository.getAllRulesWithSource()
+                rulesWithSource = repository.getAllRulesWithSource().toList()
             }
         }
     }
@@ -116,10 +106,11 @@ fun RulesScreen(
         scope.launch {
             try {
                 Toast.makeText(context, context.getString(R.string.toast_syncing), Toast.LENGTH_SHORT).show()
-                repository.fetchRemoteRules(updateUrl, updateSni, updateIp)
-                rulesWithSource = repository.getAllRulesWithSource()
+                repository.fetchRemoteRules(updateUrl)
+                rulesWithSource = repository.getAllRulesWithSource().toList()
                 Toast.makeText(context, context.getString(R.string.toast_sync_success), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
+
                 Toast.makeText(context, context.getString(R.string.toast_error, e.message), Toast.LENGTH_LONG).show()
             }
         }
@@ -205,14 +196,10 @@ fun RulesScreen(
     if (showSyncDialog) {
         RemoteSyncDialog(
             url = updateUrl,
-            sni = updateSni,
-            ip = updateIp,
             onDismiss = { showSyncDialog = false },
-            onSave = { newUrl, newSni, newIp ->
+            onSave = { newUrl ->
                 scope.launch {
                     repository.setUpdateUrl(newUrl)
-                    repository.setUpdateSni(newSni)
-                    repository.setUpdateIp(newIp)
                     showSyncDialog = false
                     fetchRules()
                 }
@@ -224,14 +211,10 @@ fun RulesScreen(
 @Composable
 fun RemoteSyncDialog(
     url: String,
-    sni: String,
-    ip: String,
     onDismiss: () -> Unit,
-    onSave: (String, String, String) -> Unit
+    onSave: (String) -> Unit
 ) {
     var tempUrl by remember { mutableStateOf(url) }
-    var tempSni by remember { mutableStateOf(sni) }
-    var tempIp by remember { mutableStateOf(ip) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -246,22 +229,6 @@ fun RemoteSyncDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
-                OutlinedTextField(
-                    value = tempSni,
-                    onValueChange = { tempSni = it },
-                    label = { Text(stringResource(R.string.rule_label_sni)) },
-                    placeholder = { Text(stringResource(R.string.rule_placeholder_sni)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = tempIp,
-                    onValueChange = { tempIp = it },
-                    label = { Text(stringResource(R.string.rule_label_ip)) },
-                    placeholder = { Text(stringResource(R.string.rule_placeholder_ip)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
                 Text(
                     text = stringResource(R.string.hint_spoofing_download),
                     style = MaterialTheme.typography.bodySmall,
@@ -270,7 +237,7 @@ fun RemoteSyncDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(tempUrl, tempSni, tempIp) }) {
+            Button(onClick = { onSave(tempUrl) }) {
                 Text(stringResource(R.string.action_sync_remote))
             }
         },
