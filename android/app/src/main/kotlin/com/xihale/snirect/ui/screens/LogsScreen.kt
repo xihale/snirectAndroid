@@ -27,6 +27,9 @@ import com.xihale.snirect.ui.theme.AppIcons
 import java.text.SimpleDateFormat
 import java.util.*
 
+import androidx.compose.ui.res.stringResource
+import com.xihale.snirect.R
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogsScreen(navController: NavController) {
@@ -38,7 +41,7 @@ fun LogsScreen(navController: NavController) {
     var selectedLevel by remember { mutableStateOf<LogLevel?>(null) }
     var showFilterMenu by remember { mutableStateOf(false) }
 
-    val filteredLogs = remember(logs.size, searchQuery, selectedLevel) {
+    val filteredLogs: List<LogEntry> = remember(logs.size, searchQuery, selectedLevel) {
         logs.filter { entry ->
             (selectedLevel == null || entry.level == selectedLevel) &&
             (searchQuery.isEmpty() || entry.message.contains(searchQuery, ignoreCase = true))
@@ -57,27 +60,27 @@ fun LogsScreen(navController: NavController) {
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text("Log Viewer") },
+                    title = { Text(stringResource(R.string.logs_title)) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                         }
                     },
                     actions = {
                         IconButton(onClick = {
-                            val logText = filteredLogs.joinToString("\n") { 
-                                "[${dateFormat.format(Date(it.timestamp))}] [${it.level}] ${it.message}" 
+                            val logText = filteredLogs.joinToString("\n") { entry ->
+                                "[${dateFormat.format(Date(entry.timestamp))}] [${entry.level}] ${entry.message}" 
                             }
                             val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                 type = "text/plain"
                                 putExtra(android.content.Intent.EXTRA_TEXT, logText)
                             }
-                            context.startActivity(android.content.Intent.createChooser(intent, "Share Logs"))
+                            context.startActivity(android.content.Intent.createChooser(intent, context.getString(R.string.share_logs_chooser)))
                         }) {
-                            Icon(Icons.Default.Share, contentDescription = "Share")
+                            Icon(Icons.Default.Share, contentDescription = stringResource(R.string.action_share_logs))
                         }
                         IconButton(onClick = { logs.clear() }) {
-                            Icon(AppIcons.DeleteSweep, contentDescription = "Clear Logs")
+                            Icon(AppIcons.DeleteSweep, contentDescription = stringResource(R.string.action_clear_logs))
                         }
                     }
                 )
@@ -88,7 +91,7 @@ fun LogsScreen(navController: NavController) {
                     onSearch = { },
                     active = false,
                     onActiveChange = { },
-                    placeholder = { Text("Search logs...") },
+                    placeholder = { Text(stringResource(R.string.search_logs_placeholder)) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
@@ -118,7 +121,7 @@ fun LogsScreen(navController: NavController) {
                     Tab(
                         selected = selectedLevel == null,
                         onClick = { selectedLevel = null },
-                        text = { Text("ALL") }
+                        text = { Text(stringResource(R.string.tab_all)) }
                     )
                     LogLevel.values().forEach { level ->
                         Tab(
@@ -145,7 +148,7 @@ fun LogsScreen(navController: NavController) {
                     )
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        "No logs found",
+                        stringResource(R.string.no_logs_found),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.outline
                     )

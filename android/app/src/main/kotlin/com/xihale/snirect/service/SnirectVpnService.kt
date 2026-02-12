@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+import com.xihale.snirect.R
 import com.xihale.snirect.util.AppLogger
 
 class SnirectVpnService : VpnService(), EngineCallbacks {
@@ -85,10 +86,10 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
         
         // Android 14+ requires explicit service type
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, createNotification("启动中..."), 
+            startForeground(NOTIFICATION_ID, createNotification("STARTING"), 
                 android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
-            startForeground(NOTIFICATION_ID, createNotification("启动中..."))
+            startForeground(NOTIFICATION_ID, createNotification("STARTING"))
         }
         
         serviceScope.launch {
@@ -99,7 +100,7 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
                 updateNotification("ACTIVE")
             } catch (e: Exception) {
                 AppLogger.e("VPN Start Failed", e)
-                VpnStatusManager.updateStatus(false, "连接失败: ${e.message}")
+                VpnStatusManager.updateStatus(false, "FAILED:${e.message}")
                 stopVpn()
             }
         }
@@ -112,7 +113,7 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
         try { vpnInterface?.close() } catch (e: Exception) {}
         vpnInterface = null
         isRunning = false
-        VpnStatusManager.updateStatus(false, "已断开")
+        VpnStatusManager.updateStatus(false, "DISCONNECTED")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
@@ -186,7 +187,7 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val serviceChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
-                "VPN Status",
+                getString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
@@ -202,9 +203,21 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
             this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val localizedText = when (text) {
+            "STARTING" -> getString(R.string.vpn_status_starting)
+            "STOPPING" -> getString(R.string.vpn_status_stopping)
+            "ACTIVE" -> getString(R.string.vpn_status_active)
+            "DISCONNECTED" -> getString(R.string.vpn_status_disconnected)
+            else -> if (text.startsWith("FAILED:")) {
+                getString(R.string.vpn_status_connected_failed, text.removePrefix("FAILED:"))
+            } else {
+                text
+            }
+        }
+
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("Snirect VPN")
-            .setContentText(text)
+            .setContentTitle(getString(R.string.notification_title))
+            .setContentText(localizedText)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pendingIntent)
             .setOngoing(true)

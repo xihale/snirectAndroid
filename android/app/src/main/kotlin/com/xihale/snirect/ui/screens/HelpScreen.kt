@@ -13,16 +13,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 
+import androidx.compose.ui.res.stringResource
+import com.xihale.snirect.R
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HelpScreen(navController: NavController) {
     Scaffold(
         topBar = {
             MediumTopAppBar(
-                title = { Text("Help & Guide") },
+                title = { Text(stringResource(R.string.help_title)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 }
             )
@@ -37,27 +40,23 @@ fun HelpScreen(navController: NavController) {
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             HelpSection(
-                title = "1. Why Install CA Certificate?",
-                content = "To support HTTPS decryption and SNI modification, Snirect needs a Root CA certificate installed in your system. This allows the app to handle encrypted traffic for domains like Pixiv."
+                title = stringResource(R.string.help_section_1_title),
+                content = stringResource(R.string.help_section_1_content)
             )
 
             HelpSection(
-                title = "2. How to Install (Android 11+)",
-                content = "1. Click 'HTTPS Decryption' on the home screen to export 'snirect_ca.crt' to your Downloads folder.\n" +
-                        "2. Go to System Settings -> Security -> Encryption & credentials.\n" +
-                        "3. Select 'Install a certificate' -> 'CA certificate'.\n" +
-                        "4. Tap 'Install anyway' on the warning.\n" +
-                        "5. Pick the exported certificate file."
+                title = stringResource(R.string.help_section_2_title),
+                content = stringResource(R.string.help_section_2_content)
             )
 
             HelpSection(
-                title = "3. Starting the Service",
-                content = "Click 'ACTIVATE' on the main screen. Grant VPN permission if prompted. Once active, your traffic will be routed through the Snirect core for SNI modification."
+                title = stringResource(R.string.help_section_3_title),
+                content = stringResource(R.string.help_section_3_content)
             )
 
             HelpSection(
-                title = "4. DNS & Rules",
-                content = "You can configure custom DNS servers (DoH) and traffic rules in the Settings menu. Rules allow you to define which domains should have their SNI or IP modified."
+                title = stringResource(R.string.help_section_4_title),
+                content = stringResource(R.string.help_section_4_content)
             )
 
             OutlinedCard(
@@ -69,7 +68,7 @@ fun HelpScreen(navController: NavController) {
                 ) {
                     Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Text(
-                        "Note: If you encounter certificate errors in apps, ensure the CA certificate is correctly installed in the 'User' trust store.",
+                        stringResource(R.string.help_note),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

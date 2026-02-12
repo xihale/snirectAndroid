@@ -7,7 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,6 +36,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.res.stringResource
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
+import com.xihale.snirect.R
 import com.xihale.snirect.data.model.LogEntry
 import com.xihale.snirect.data.model.LogLevel
 import com.xihale.snirect.data.repository.ConfigRepository
@@ -61,9 +65,9 @@ class MainViewModelFactory(private val repository: ConfigRepository) : ViewModel
 
 class MainViewModel(private val repository: ConfigRepository) : ViewModel() {
     var isRunning by mutableStateOf(false)
-    var statusText by mutableStateOf("已断开")
-    var uploadSpeed by mutableStateOf("0 B/s")
-    var downloadSpeed by mutableStateOf("0 B/s")
+    var statusText by mutableStateOf("DISCONNECTED")
+    var uploadSpeed by mutableStateOf(0L)
+    var downloadSpeed by mutableStateOf(0L)
 
     var vpnPermissionLauncher: androidx.activity.result.ActivityResultLauncher<Intent>? = null
     var notificationPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>? = null
@@ -90,7 +94,7 @@ class MainViewModel(private val repository: ConfigRepository) : ViewModel() {
             kotlinx.coroutines.MainScope().launch {
                 val skipCheck = repository.skipCertCheck.first()
                 if (!skipCheck && !CertUtil.isCaCertInstalled()) {
-                    Toast.makeText(context, "Please install CA certificate first!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, context.getString(R.string.toast_cert_install_required), Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 prepareVpn(context)
@@ -126,7 +130,7 @@ class MainViewModel(private val repository: ConfigRepository) : ViewModel() {
             action = SnirectVpnService.ACTION_START
         }
         context.startForegroundService(intent)
-        VpnStatusManager.updateStatus(false, "启动中...")
+        VpnStatusManager.updateStatus(false, "STARTING")
     }
 
     private fun stopVpn(context: android.content.Context) {
@@ -134,7 +138,7 @@ class MainViewModel(private val repository: ConfigRepository) : ViewModel() {
             action = SnirectVpnService.ACTION_STOP
         }
         context.startService(intent)
-        VpnStatusManager.updateStatus(false, "停止中...")
+        VpnStatusManager.updateStatus(false, "STOPPING")
     }
 
     fun installCert(context: android.content.Context) {
@@ -156,19 +160,19 @@ class MainViewModel(private val repository: ConfigRepository) : ViewModel() {
                     outputStream.write(certBytes)
                 }
                 AppLogger.i("CA cert saved to Downloads via MediaStore: $uri")
-                Toast.makeText(context, "Saved to Downloads/snirect_ca.crt", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.toast_saved_to_downloads), Toast.LENGTH_LONG).show()
                 
                 val intent = Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS)
                 context.startActivity(intent)
             } ?: throw Exception("Failed to create MediaStore entry")
         } catch (e: Exception) {
             AppLogger.e("CA export failed", e)
-            Toast.makeText(context, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.toast_export_failed, e.message), Toast.LENGTH_SHORT).show()
         }
     }
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     companion object {
         val logBuffer = mutableStateListOf<LogEntry>()
         fun log(message: String) {
@@ -200,6 +204,17 @@ class MainActivity : ComponentActivity() {
         
         val repository = ConfigRepository(applicationContext)
         val factory = MainViewModelFactory(repository)
+
+        kotlinx.coroutines.MainScope().launch {
+            repository.language.collect { lang ->
+                val appLocale: LocaleListCompat = if (lang == ConfigRepository.LANGUAGE_SYSTEM) {
+                    LocaleListCompat.getEmptyLocaleList()
+                } else {
+                    LocaleListCompat.forLanguageTags(lang)
+                }
+                AppCompatDelegate.setApplicationLocales(appLocale)
+            }
+        }
         
         setContent {
             SnirectTheme {
@@ -221,7 +236,7 @@ class MainActivity : ComponentActivity() {
                             val skipCheck = repository.skipCertCheck.first()
                             if (!skipCheck && !CertUtil.isCaCertInstalled()) {
                                 AppLogger.w("Auto-activation: Blocked - CA certificate not installed")
-                                Toast.makeText(context, "Auto-start blocked: Please install CA certificate", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, context.getString(R.string.toast_auto_start_blocked), Toast.LENGTH_LONG).show()
                             } else {
                                 viewModel.startVpn(context)
                             }
@@ -353,16 +368,16 @@ fun SnirectApp(
     if (showCertPrompt) {
         AlertDialog(
             onDismissRequest = { showCertPrompt = false },
-            title = { Text("Certificate Required") },
-            text = { Text("CA Certificate is not installed or trusted. HTTPS decryption will not work. Would you like to view the installation guide?") },
+            title = { Text(stringResource(R.string.cert_required_title)) },
+            text = { Text(stringResource(R.string.cert_required_msg)) },
             confirmButton = {
                 Button(onClick = {
                     showCertPrompt = false
                     navController.navigate("help")
-                }) { Text("View Guide") }
+                }) { Text(stringResource(R.string.action_view_guide)) }
             },
             dismissButton = {
-                TextButton(onClick = { showCertPrompt = false }) { Text("Later") }
+                TextButton(onClick = { showCertPrompt = false }) { Text(stringResource(R.string.action_later)) }
             }
         )
     }
@@ -381,7 +396,7 @@ fun SnirectApp(
         if (isGranted) {
             viewModel.startVpn(context)
         } else {
-            Toast.makeText(context, "Notification permission required for VPN status", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.toast_notif_permission_required), Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -411,9 +426,9 @@ fun SnirectApp(
             LargeTopAppBar(
                 title = { 
                     Column {
-                        Text("SNIRECT", fontWeight = FontWeight.Black)
+                        Text(stringResource(R.string.app_logo), fontWeight = FontWeight.Black)
                         Text(
-                            text = if (viewModel.isRunning) "Service is active" else "Service is idle",
+                            text = getLocalizedStatus(viewModel.statusText),
                             style = MaterialTheme.typography.labelMedium,
                             color = statusColor
                         )
@@ -421,13 +436,13 @@ fun SnirectApp(
                 },
                 actions = {
                     IconButton(onClick = { navController.navigate("help") }) {
-                        Icon(Icons.Default.Info, contentDescription = "Help")
+                        Icon(Icons.Default.Info, contentDescription = stringResource(R.string.help_title))
                     }
                     IconButton(onClick = { navController.navigate("logs") }) {
-                        Icon(AppIcons.Terminal, contentDescription = "Logs")
+                        Icon(AppIcons.Terminal, contentDescription = stringResource(R.string.logs_title))
                     }
                     IconButton(onClick = { navController.navigate("settings") }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_title))
                     }
                 }
             )
@@ -481,7 +496,7 @@ fun SnirectApp(
                         shape = MaterialTheme.shapes.medium,
                         colors = ButtonDefaults.buttonColors(containerColor = activeColor)
                     ) {
-                        Text(if (viewModel.isRunning) "DEACTIVATE" else "ACTIVATE")
+                        Text(if (viewModel.isRunning) stringResource(R.string.action_deactivate) else stringResource(R.string.action_activate))
                     }
                 }
             }
@@ -489,15 +504,15 @@ fun SnirectApp(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 SpeedCard(
                     modifier = Modifier.weight(1f),
-                    title = "Upload",
-                    speed = viewModel.uploadSpeed,
+                    title = stringResource(R.string.label_upload),
+                    speed = formatSpeed(viewModel.uploadSpeed),
                     icon = AppIcons.Speed,
                     color = MaterialTheme.colorScheme.primary
                 )
                 SpeedCard(
                     modifier = Modifier.weight(1f),
-                    title = "Download",
-                    speed = viewModel.downloadSpeed,
+                    title = stringResource(R.string.label_download),
+                    speed = formatSpeed(viewModel.downloadSpeed),
                     icon = AppIcons.Speed,
                     color = MaterialTheme.colorScheme.tertiary
                 )
@@ -509,18 +524,44 @@ fun SnirectApp(
             ) {
                 ListItem(
                     leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
-                    headlineContent = { Text("HTTPS Decryption") },
-                    supportingContent = { Text("Install CA Certificate to enable SNI modification for HTTPS") },
+                    headlineContent = { Text(stringResource(R.string.https_decryption)) },
+                    supportingContent = { Text(stringResource(R.string.https_decryption_desc)) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.ArrowForward, null) }
                 )
             }
             
             Text(
-                "Version: ${BuildConfig.VERSION_NAME}",
+                stringResource(R.string.version_format, BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
+        }
+    }
+}
+
+@Composable
+fun formatSpeed(bytes: Long): String {
+    return when {
+        bytes < 1024 -> stringResource(R.string.speed_format, bytes.toString())
+        bytes < 1024 * 1024 -> stringResource(R.string.speed_kb_format, bytes / 1024.0)
+        else -> stringResource(R.string.speed_mb_format, bytes / (1024.0 * 1024.0))
+    }
+}
+
+@Composable
+fun getLocalizedStatus(status: String): String {
+    return when (status) {
+        "DISCONNECTED" -> stringResource(R.string.vpn_status_disconnected)
+        "STARTING" -> stringResource(R.string.vpn_status_starting)
+        "STOPPING" -> stringResource(R.string.vpn_status_stopping)
+        "ACTIVE" -> stringResource(R.string.vpn_status_active)
+        "IDLE" -> stringResource(R.string.vpn_status_idle)
+        else -> if (status.startsWith("FAILED:")) {
+            val error = status.removePrefix("FAILED:")
+            stringResource(R.string.vpn_status_connected_failed, error)
+        } else {
+            status
         }
     }
 }

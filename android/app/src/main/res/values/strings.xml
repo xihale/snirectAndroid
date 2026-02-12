@@ -1,3 +1,144 @@
 <resources>
     <string name="app_name">Snirect</string>
+    <string name="app_logo">SNIRECT</string>
+
+    <!-- VPN Status -->
+    <string name="vpn_status_disconnected">Disconnected</string>
+    <string name="vpn_status_starting">Starting...</string>
+    <string name="vpn_status_stopping">Stopping...</string>
+    <string name="vpn_status_active">Service is active</string>
+    <string name="vpn_status_idle">Service is idle</string>
+    <string name="vpn_status_connected_failed">Connection failed: %1$s</string>
+    <string name="vpn_status_running">Running</string>
+
+    <!-- Main Screen -->
+    <string name="action_activate">ACTIVATE</string>
+    <string name="action_deactivate">DEACTIVATE</string>
+    <string name="label_upload">Upload</string>
+    <string name="label_download">Download</string>
+    <string name="https_decryption">HTTPS Decryption</string>
+    <string name="https_decryption_desc">Install CA Certificate to enable SNI modification for HTTPS</string>
+    <string name="version_format">Version: %1$s</string>
+    <string name="speed_format">%1$s B/s</string>
+    <string name="speed_kb_format">%1$.1f KB/s</string>
+    <string name="speed_mb_format">%1$.1f MB/s</string>
+
+    <!-- Certificate Prompt -->
+    <string name="cert_required_title">Certificate Required</string>
+    <string name="cert_required_msg">CA Certificate is not installed or trusted. HTTPS decryption will not work. Would you like to view the installation guide?</string>
+    <string name="action_view_guide">View Guide</string>
+    <string name="action_later">Later</string>
+
+    <!-- Toasts -->
+    <string name="toast_cert_install_required">Please install CA certificate first!</string>
+    <string name="toast_saved_to_downloads">Saved to Downloads/snirect_ca.crt</string>
+    <string name="toast_export_failed">Export failed: %1$s</string>
+    <string name="toast_auto_start_blocked">Auto-start blocked: Please install CA certificate</string>
+    <string name="toast_boot_auto_start_blocked">Boot auto-start blocked: Please install CA certificate</string>
+    <string name="toast_notif_permission_required">Notification permission required for VPN status</string>
+    <string name="toast_fetching_rules">Fetching rules...</string>
+    <string name="toast_rules_updated">Rules updated</string>
+    <string name="toast_error">Error: %1$s</string>
+    <string name="settings_title">Settings</string>
+    <string name="group_general">General</string>
+    <string name="group_network">Network</string>
+    <string name="setting_mtu">MTU</string>
+    <string name="setting_mtu_desc">Current: %1$s</string>
+    <string name="setting_check_hostname">Check Hostname</string>
+                <string name="setting_check_hostname_desc">Verify SSL certificates</string>
+    <string name="setting_ipv6">IPv6 Support</string>
+    <string name="setting_ipv6_desc">Enable IPv6 routing</string>
+    <string name="group_automation_security">Automation &amp; Security</string>
+    <string name="setting_language">Language</string>
+    <string name="lang_system">Follow System</string>
+    <string name="lang_en">English</string>
+    <string name="lang_zh">简体中文</string>
+    <string name="setting_active_startup">Active on App Start</string>
+    <string name="setting_active_startup_desc">Automatically start VPN when opening app</string>
+    <string name="setting_active_boot">Active on Boot</string>
+    <string name="setting_active_boot_desc">Automatically start VPN on device startup</string>
+    <string name="setting_skip_cert_check">Skip Certificate Check</string>
+    <string name="setting_skip_cert_check_desc">Do not check if CA cert is installed before starting</string>
+    <string name="group_rules_dns">Rules &amp; DNS</string>
+    <string name="setting_dns_config">DNS Configuration</string>
+    <string name="setting_dns_config_desc">DoH and Bootstrap DNS</string>
+    <string name="setting_traffic_rules">Traffic Rules</string>
+    <string name="setting_traffic_rules_desc">Manage domain and IP rules</string>
+    <string name="setting_update_url">Update URL</string>
+    <string name="group_logging_debug">Logging &amp; Debug</string>
+    <string name="setting_log_level">Log Level</string>
+    <string name="setting_log_level_desc">Current: %1$s</string>
+
+    <!-- Security Warning Dialog -->
+    <string name="security_warning_title">Security Warning</string>
+    <string name="security_warning_msg">Disabling hostname verification makes the connection vulnerable to MITM attacks.</string>
+    <string name="action_disable_anyway">Disable Anyway</string>
+    <string name="action_cancel">Cancel</string>
+
+    <!-- Help Screen -->
+    <string name="help_title">Help &amp; Guide</string>
+    <string name="help_section_1_title">1. Why Install CA Certificate?</string>
+    <string name="help_section_1_content">To support HTTPS decryption and SNI modification, Snirect needs a Root CA certificate installed in your system. This allows the app to handle encrypted traffic for domains like Pixiv.</string>
+    <string name="help_section_2_title">2. How to Install (Android 11+)</string>
+    <string name="help_section_2_content">1. Click \'HTTPS Decryption\' on the home screen to export \'snirect_ca.crt\' to your Downloads folder.\n2. Go to System Settings -> Security -> Encryption &amp; credentials.\n3. Select \'Install a certificate\' -> \'CA certificate\'.\n4. Tap \'Install anyway\' on the warning.\n5. Pick the exported certificate file.</string>
+    <string name="help_section_3_title">3. Starting the Service</string>
+    <string name="help_section_3_content">Click \'ACTIVATE\' on the main screen. Grant VPN permission if prompted. Once active, your traffic will be routed through the Snirect core for SNI modification.</string>
+    <string name="help_section_4_title">4. DNS &amp; Rules</string>
+    <string name="help_section_4_content">You can configure custom DNS servers (DoH) and traffic rules in the Settings menu. Rules allow you to define which domains should have their SNI or IP modified.</string>
+    <string name="help_note">Note: If you encounter certificate errors in apps, ensure the CA certificate is correctly installed in the \'User\' trust store.</string>
+
+    <!-- Logs Screen -->
+    <string name="logs_title">Log Viewer</string>
+    <string name="action_share_logs">Share Logs</string>
+    <string name="action_clear_logs">Clear Logs</string>
+    <string name="search_logs_placeholder">Search logs...</string>
+    <string name="share_logs_chooser">Share Logs</string>
+    <string name="tab_all">ALL</string>
+    <string name="no_logs_found">No logs found</string>
+
+    <!-- Rules Screen -->
+    <string name="rules_title">Traffic Rules</string>
+    <string name="action_update_rules">Update Rules</string>
+    <string name="filter_rules_placeholder">Filter rules...</string>
+    <string name="action_add_rule">Add Rule</string>
+    <string name="rule_source_local">LOCAL</string>
+    <string name="rule_source_synced">REMOTE</string>
+    <string name="rule_no_pattern">No pattern</string>
+    <string name="rule_sni_original">ORIGINAL</string>
+    <string name="rule_sni_strip">STRIP</string>
+    <string name="rule_label_sni_format">SNI: %1$s</string>
+    <string name="rule_label_ip_format">IP: %1$s</string>
+    <string name="rule_label_verify_format">Verify: %1$s</string>
+
+    <!-- Rule Dialog -->
+    <string name="rule_dialog_title_add">Add Rule</string>
+    <string name="rule_dialog_title_edit">Edit Rule</string>
+    <string name="rule_label_patterns">Patterns (one per line)</string>
+    <string name="rule_placeholder_patterns">*google*\n*.example.com</string>
+    <string name="rule_label_sni">Target SNI</string>
+    <string name="rule_placeholder_sni">Leave empty to STRIP</string>
+    <string name="rule_label_ip">Target IP</string>
+    <string name="rule_placeholder_ip">e.g. 1.1.1.1</string>
+    <string name="rule_label_verify">Cert Verify</string>
+    <string name="rule_placeholder_verify">true/false/domain</string>
+    <string name="action_save">Save</string>
+
+    <!-- DNS Screen -->
+    <string name="dns_title">DNS Resolver</string>
+    <string name="action_add_server">Add Server</string>
+    <string name="group_bootstrap">Bootstrap</string>
+    <string name="label_bootstrap_dns">Bootstrap DNS</string>
+    <string name="placeholder_bootstrap_dns">tls://223.5.5.5</string>
+    <string name="group_upstream">Upstream Nameservers (DoH/DoT)</string>
+    <string name="no_custom_nameservers">No custom nameservers</string>
+    <string name="action_remove">Remove</string>
+    <string name="dialog_add_upstream">Add Upstream</string>
+    <string name="label_endpoint_url">Endpoint URL</string>
+    <string name="placeholder_endpoint_url">https://dns.google/dns-query</string>
+    <string name="action_add">Add</string>
+    <string name="action_back">Back</string>
+
+    <!-- Service & Notification -->
+    <string name="notification_channel_name">VPN Status</string>
+    <string name="notification_title">Snirect VPN</string>
 </resources>

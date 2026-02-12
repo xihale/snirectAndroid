@@ -31,6 +31,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.ui.text.style.TextOverflow
 
+import androidx.compose.ui.res.stringResource
+import com.xihale.snirect.R
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RulesScreen(
@@ -100,12 +103,12 @@ fun RulesScreen(
     fun fetchRules() {
         scope.launch {
             try {
-                Toast.makeText(context, "Fetching rules...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.toast_fetching_rules), Toast.LENGTH_SHORT).show()
                 repository.fetchRemoteRules(updateUrl)
                 rulesWithSource = repository.getAllRulesWithSource()
-                Toast.makeText(context, "Rules updated", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.toast_rules_updated), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.toast_error, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -114,15 +117,15 @@ fun RulesScreen(
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text("Traffic Rules") },
+                    title = { Text(stringResource(R.string.rules_title)) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                         }
                     },
                     actions = {
                         IconButton(onClick = { fetchRules() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Update Rules")
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.action_update_rules))
                         }
                     }
                 )
@@ -130,7 +133,7 @@ fun RulesScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Filter rules...") },
+                    placeholder = { Text(stringResource(R.string.filter_rules_placeholder)) },
                     leadingIcon = { Icon(Icons.Default.Search, null) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
@@ -146,7 +149,7 @@ fun RulesScreen(
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Rule")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.action_add_rule))
             }
         }
     ) { padding ->
@@ -218,14 +221,14 @@ fun RuleItem(
                         shape = MaterialTheme.shapes.extraSmall
                     ) {
                         Text(
-                            if (isOverwrite) "LOCAL" else "SYNCED",
+                            if (isOverwrite) stringResource(R.string.rule_source_local) else stringResource(R.string.rule_source_synced),
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = rule.patterns?.firstOrNull() ?: "No pattern",
+                        text = rule.patterns?.firstOrNull() ?: stringResource(R.string.rule_no_pattern),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -248,22 +251,22 @@ fun RuleItem(
                     Icon(AppIcons.Shield, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
                     Spacer(Modifier.width(4.dp))
                     val sniText = when (rule.targetSni) {
-                        null -> "ORIGINAL"
-                        "" -> "STRIP"
+                        null -> stringResource(R.string.rule_sni_original)
+                        "" -> stringResource(R.string.rule_sni_strip)
                         else -> rule.targetSni
                     }
-                    Text("SNI: $sniText", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.rule_label_sni_format, sniText), style = MaterialTheme.typography.bodySmall)
                 }
                 if (!rule.targetIp.isNullOrEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
                         Spacer(Modifier.width(4.dp))
-                        Text("IP: ${rule.targetIp}", style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.rule_label_ip_format, rule.targetIp), style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 if (!rule.certVerify.isNullOrEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Verify: ${rule.certVerify}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        Text(stringResource(R.string.rule_label_verify_format, rule.certVerify), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                     }
                 }
             }
@@ -296,14 +299,14 @@ fun RuleDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initialRule == null) "Add Rule" else "Edit Rule") },
+        title = { Text(if (initialRule == null) stringResource(R.string.rule_dialog_title_add) else stringResource(R.string.rule_dialog_title_edit)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = patterns,
                     onValueChange = { patterns = it },
-                    label = { Text("Patterns (one per line)") },
-                    placeholder = { Text("*google*\n*.example.com") },
+                    label = { Text(stringResource(R.string.rule_label_patterns)) },
+                    placeholder = { Text(stringResource(R.string.rule_placeholder_patterns)) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
                     maxLines = 5
@@ -311,24 +314,24 @@ fun RuleDialog(
                 OutlinedTextField(
                     value = sni,
                     onValueChange = { sni = it },
-                    label = { Text("Target SNI") },
-                    placeholder = { Text("Leave empty to STRIP") },
+                    label = { Text(stringResource(R.string.rule_label_sni)) },
+                    placeholder = { Text(stringResource(R.string.rule_placeholder_sni)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = ip,
                     onValueChange = { ip = it },
-                    label = { Text("Target IP") },
-                    placeholder = { Text("e.g. 1.1.1.1") },
+                    label = { Text(stringResource(R.string.rule_label_ip)) },
+                    placeholder = { Text(stringResource(R.string.rule_placeholder_ip)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = verify,
                     onValueChange = { verify = it },
-                    label = { Text("Cert Verify") },
-                    placeholder = { Text("true/false/domain") },
+                    label = { Text(stringResource(R.string.rule_label_verify)) },
+                    placeholder = { Text(stringResource(R.string.rule_placeholder_verify)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -341,12 +344,12 @@ fun RuleDialog(
                     .filter { it.isNotEmpty() }
                 onSave(Rule(patternList, sni.trim(), ip.trim().ifEmpty { null }, verify.trim().ifEmpty { null }))
             }) {
-                Text("Save")
+                Text(stringResource(R.string.action_save))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         }
     )

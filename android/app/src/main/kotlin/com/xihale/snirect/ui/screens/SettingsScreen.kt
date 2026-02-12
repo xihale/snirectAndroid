@@ -22,6 +22,9 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.style.TextOverflow
 
+import androidx.compose.ui.res.stringResource
+import com.xihale.snirect.R
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -37,6 +40,7 @@ fun SettingsScreen(
     var activateOnStartup by remember { mutableStateOf(true) }
     var activateOnBoot by remember { mutableStateOf(false) }
     var skipCertCheck by remember { mutableStateOf(false) }
+    var language by remember { mutableStateOf(ConfigRepository.LANGUAGE_SYSTEM) }
     
     val scope = rememberCoroutineScope()
     
@@ -67,14 +71,17 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         repository.skipCertCheck.collect { skipCertCheck = it }
     }
+    LaunchedEffect(Unit) {
+        repository.language.collect { language = it }
+    }
 
     Scaffold(
         topBar = {
             LargeTopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 }
             )
@@ -88,12 +95,48 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            SettingsGroup(title = "Network") {
+            SettingsGroup(title = stringResource(R.string.group_general)) {
+                var showLanguageDropdown by remember { mutableStateOf(false) }
+                val languageLabel = when (language) {
+                    ConfigRepository.LANGUAGE_SYSTEM -> stringResource(R.string.lang_system)
+                    "en" -> stringResource(R.string.lang_en)
+                    "zh" -> stringResource(R.string.lang_zh)
+                    else -> language
+                }
+
+                SettingsTile(
+                    icon = AppIcons.Language,
+                    title = stringResource(R.string.setting_language),
+                    subtitle = languageLabel,
+                    onClick = { showLanguageDropdown = true }
+                ) {
+                    DropdownMenu(
+                        expanded = showLanguageDropdown,
+                        onDismissRequest = { showLanguageDropdown = false }
+                    ) {
+                        listOf(
+                            ConfigRepository.LANGUAGE_SYSTEM to stringResource(R.string.lang_system),
+                            "en" to stringResource(R.string.lang_en),
+                            "zh" to stringResource(R.string.lang_zh)
+                        ).forEach { (code, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    scope.launch { repository.setLanguage(code) }
+                                    showLanguageDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            SettingsGroup(title = stringResource(R.string.group_network)) {
                 SettingsTile(
                     icon = AppIcons.NetworkCheck,
-                    title = "MTU",
-                    subtitle = "Current: $mtu",
-                    onClick = { }
+                    title = stringResource(R.string.setting_mtu),
+                    subtitle = stringResource(R.string.setting_mtu_desc, mtu),
+                    onClick = null
                 ) {
                     OutlinedTextField(
                         value = mtu,
@@ -110,9 +153,9 @@ fun SettingsScreen(
                 var showWarningDialog by remember { mutableStateOf(false) }
                 SettingsTile(
                     icon = AppIcons.BugReport,
-                    title = "Check Hostname",
-                    subtitle = "Verify SSL certificates",
-                    onClick = { }
+                    title = stringResource(R.string.setting_check_hostname),
+                    subtitle = stringResource(R.string.setting_check_hostname_desc),
+                    onClick = null
                 ) {
                     Switch(
                         checked = checkHostname,
@@ -129,26 +172,26 @@ fun SettingsScreen(
                 if (showWarningDialog) {
                     AlertDialog(
                         onDismissRequest = { showWarningDialog = false },
-                        title = { Text("Security Warning") },
-                        text = { Text("Disabling hostname verification makes the connection vulnerable to MITM attacks.") },
+                        title = { Text(stringResource(R.string.security_warning_title)) },
+                        text = { Text(stringResource(R.string.security_warning_msg)) },
                         confirmButton = {
                             TextButton(onClick = {
                                 checkHostname = false
                                 scope.launch { repository.setCheckHostname(false) }
                                 showWarningDialog = false
-                            }) { Text("Disable Anyway", color = MaterialTheme.colorScheme.error) }
+                            }) { Text(stringResource(R.string.action_disable_anyway), color = MaterialTheme.colorScheme.error) }
                         },
                         dismissButton = {
-                            TextButton(onClick = { showWarningDialog = false }) { Text("Cancel") }
+                            TextButton(onClick = { showWarningDialog = false }) { Text(stringResource(R.string.action_cancel)) }
                         }
                     )
                 }
 
                 SettingsTile(
                     icon = AppIcons.BugReport,
-                    title = "IPv6 Support",
-                    subtitle = "Enable IPv6 routing",
-                    onClick = { }
+                    title = stringResource(R.string.setting_ipv6),
+                    subtitle = stringResource(R.string.setting_ipv6_desc),
+                    onClick = null
                 ) {
                     Switch(
                         checked = enableIpv6,
@@ -160,12 +203,12 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsGroup(title = "Automation & Security") {
+            SettingsGroup(title = stringResource(R.string.group_automation_security)) {
                 SettingsTile(
                     icon = AppIcons.Terminal,
-                    title = "Active on App Start",
-                    subtitle = "Automatically start VPN when opening app",
-                    onClick = { }
+                    title = stringResource(R.string.setting_active_startup),
+                    subtitle = stringResource(R.string.setting_active_startup_desc),
+                    onClick = null
                 ) {
                     Switch(
                         checked = activateOnStartup,
@@ -178,9 +221,9 @@ fun SettingsScreen(
 
                 SettingsTile(
                     icon = AppIcons.Update,
-                    title = "Active on Boot",
-                    subtitle = "Automatically start VPN on device startup",
-                    onClick = { }
+                    title = stringResource(R.string.setting_active_boot),
+                    subtitle = stringResource(R.string.setting_active_boot_desc),
+                    onClick = null
                 ) {
                     Switch(
                         checked = activateOnBoot,
@@ -193,9 +236,9 @@ fun SettingsScreen(
 
                 SettingsTile(
                     icon = AppIcons.Shield,
-                    title = "Skip Certificate Check",
-                    subtitle = "Do not check if CA cert is installed before starting",
-                    onClick = { }
+                    title = stringResource(R.string.setting_skip_cert_check),
+                    subtitle = stringResource(R.string.setting_skip_cert_check_desc),
+                    onClick = null
                 ) {
                     Switch(
                         checked = skipCertCheck,
@@ -207,35 +250,35 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsGroup(title = "Rules & DNS") {
+            SettingsGroup(title = stringResource(R.string.group_rules_dns)) {
                 SettingsTile(
                     icon = AppIcons.Dns,
-                    title = "DNS Configuration",
-                    subtitle = "DoH and Bootstrap DNS",
+                    title = stringResource(R.string.setting_dns_config),
+                    subtitle = stringResource(R.string.setting_dns_config_desc),
                     onClick = { navController.navigate("dns") }
                 )
                 
                 SettingsTile(
                     icon = AppIcons.Rule,
-                    title = "Traffic Rules",
-                    subtitle = "Manage domain and IP rules",
+                    title = stringResource(R.string.setting_traffic_rules),
+                    subtitle = stringResource(R.string.setting_traffic_rules_desc),
                     onClick = { navController.navigate("rules") }
                 )
 
                 SettingsTile(
                     icon = AppIcons.Update,
-                    title = "Update URL",
+                    title = stringResource(R.string.setting_update_url),
                     subtitle = updateUrl,
-                    onClick = { }
+                    onClick = null
                 )
             }
 
-            SettingsGroup(title = "Logging & Debug") {
+            SettingsGroup(title = stringResource(R.string.group_logging_debug)) {
                 var showLogDropdown by remember { mutableStateOf(false) }
                 SettingsTile(
                     icon = AppIcons.BugReport,
-                    title = "Log Level",
-                    subtitle = "Current: ${logLevel.uppercase()}",
+                    title = stringResource(R.string.setting_log_level),
+                    subtitle = stringResource(R.string.setting_log_level_desc, logLevel.uppercase()),
                     onClick = { showLogDropdown = true }
                 ) {
                     DropdownMenu(
@@ -284,11 +327,11 @@ fun SettingsTile(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     subtitle: String,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null
 ) {
     ListItem(
-        modifier = Modifier.clickable { onClick() },
+        modifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier,
         leadingContent = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         headlineContent = { Text(title) },
         supportingContent = { Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },

@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+import com.xihale.snirect.R
+
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
@@ -23,7 +25,7 @@ class BootReceiver : BroadcastReceiver() {
                     val skipCheck = repository.skipCertCheck.first()
                     if (!skipCheck && !CertUtil.isCaCertInstalled()) {
                         AppLogger.w("BootReceiver: Auto-start blocked - CA certificate not installed")
-                        Toast.makeText(context, "Boot auto-start blocked: Please install CA certificate", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, context.getString(R.string.toast_boot_auto_start_blocked), Toast.LENGTH_LONG).show()
                         return@launch
                     }
 

@@ -35,7 +35,7 @@ class SnirectTileService : TileService() {
     private fun updateTile(isRunning: Boolean) {
         val tile = qsTile ?: return
         tile.state = if (isRunning) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = "Snirect"
+        tile.label = getString(R.string.app_name)
         tile.icon = Icon.createWithResource(this, R.drawable.ic_launcher_foreground)
         tile.updateTile()
     }
@@ -55,7 +55,7 @@ class SnirectTileService : TileService() {
                 val repository = ConfigRepository(applicationContext)
                 val skipCheck = repository.skipCertCheck.first()
                 if (!skipCheck && !CertUtil.isCaCertInstalled()) {
-                    Toast.makeText(applicationContext, "Please install CA certificate first!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(applicationContext, getString(R.string.toast_cert_install_required), Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 

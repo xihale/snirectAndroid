@@ -58,10 +58,12 @@ class ConfigRepository(private val context: Context) {
         val KEY_ACTIVATE_ON_BOOT = booleanPreferencesKey("activate_on_boot")
         val KEY_HAS_SHOWN_HELP = booleanPreferencesKey("has_shown_help")
         val KEY_SKIP_CERT_CHECK = booleanPreferencesKey("skip_cert_check")
+        val KEY_LANGUAGE = stringPreferencesKey("language")
         
         const val DEFAULT_NAMESERVERS = "https://dnschina1.soraharu.com/dns-query,https://77.88.8.8/dns-query,https://dns.google/dns-query"
         const val DEFAULT_BOOTSTRAP_DNS = "tls://223.5.5.5"
         const val DEFAULT_UPDATE_URL = "https://github.com/SpaceTimee/Cealing-Host/releases/download/1.1.4.41/Cealing-Host.toml"
+        const val LANGUAGE_SYSTEM = "system"
     }
 
     // Settings Operations
@@ -87,6 +89,7 @@ class ConfigRepository(private val context: Context) {
     val activateOnBoot: Flow<Boolean> = context.dataStore.data.map { it[KEY_ACTIVATE_ON_BOOT] ?: false }
     val hasShownHelp: Flow<Boolean> = context.dataStore.data.map { it[KEY_HAS_SHOWN_HELP] ?: false }
     val skipCertCheck: Flow<Boolean> = context.dataStore.data.map { it[KEY_SKIP_CERT_CHECK] ?: false }
+    val language: Flow<String> = context.dataStore.data.map { it[KEY_LANGUAGE] ?: LANGUAGE_SYSTEM }
 
     suspend fun setNameservers(servers: List<String>) = context.dataStore.edit { 
         it[KEY_NAMESERVERS] = servers.joinToString(",") 
@@ -105,6 +108,7 @@ class ConfigRepository(private val context: Context) {
     suspend fun setActivateOnBoot(enable: Boolean) = context.dataStore.edit { it[KEY_ACTIVATE_ON_BOOT] = enable }
     suspend fun setHasShownHelp(shown: Boolean) = context.dataStore.edit { it[KEY_HAS_SHOWN_HELP] = shown }
     suspend fun setSkipCertCheck(skip: Boolean) = context.dataStore.edit { it[KEY_SKIP_CERT_CHECK] = skip }
+    suspend fun setLanguage(lang: String) = context.dataStore.edit { it[KEY_LANGUAGE] = lang }
 
     // Rules Operations
 

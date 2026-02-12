@@ -19,6 +19,9 @@ import kotlinx.coroutines.launch
 
 import androidx.compose.ui.text.font.FontWeight
 
+import androidx.compose.ui.res.stringResource
+import com.xihale.snirect.R
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DnsScreen(
@@ -43,17 +46,17 @@ fun DnsScreen(
     Scaffold(
         topBar = {
             LargeTopAppBar(
-                title = { Text("DNS Resolver") },
+                title = { Text(stringResource(R.string.dns_title)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Server")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.action_add_server))
             }
         }
     ) { padding ->
@@ -65,9 +68,9 @@ fun DnsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            SettingsGroup(title = "Bootstrap") {
+            SettingsGroup(title = stringResource(R.string.group_bootstrap)) {
                 ListItem(
-                    headlineContent = { Text("Bootstrap DNS") },
+                    headlineContent = { Text(stringResource(R.string.label_bootstrap_dns)) },
                     supportingContent = {
                         OutlinedTextField(
                             value = bootstrapDns.joinToString(","),
@@ -75,7 +78,7 @@ fun DnsScreen(
                                 val list = it.split(",").filter { s -> s.isNotBlank() }
                                 scope.launch { repository.setBootstrapDns(list) }
                             },
-                            placeholder = { Text("tls://223.5.5.5") },
+                            placeholder = { Text(stringResource(R.string.placeholder_bootstrap_dns)) },
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                             singleLine = true,
                             shape = MaterialTheme.shapes.medium
@@ -85,10 +88,10 @@ fun DnsScreen(
                 )
             }
 
-            SettingsGroup(title = "Upstream Nameservers (DoH/DoT)") {
+            SettingsGroup(title = stringResource(R.string.group_upstream)) {
                 if (nameservers.isEmpty()) {
                     Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text("No custom nameservers", color = MaterialTheme.colorScheme.outline)
+                        Text(stringResource(R.string.no_custom_nameservers), color = MaterialTheme.colorScheme.outline)
                     }
                 }
 
@@ -102,7 +105,7 @@ fun DnsScreen(
                                 newList.remove(server)
                                 scope.launch { repository.setNameservers(newList) }
                             }) {
-                                Icon(Icons.Default.Delete, "Remove", tint = MaterialTheme.colorScheme.error)
+                                Icon(Icons.Default.Delete, stringResource(R.string.action_remove), tint = MaterialTheme.colorScheme.error)
                             }
                         }
                     )
@@ -114,13 +117,13 @@ fun DnsScreen(
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("Add Upstream") },
+            title = { Text(stringResource(R.string.dialog_add_upstream)) },
             text = {
                 OutlinedTextField(
                     value = newNameserver,
                     onValueChange = { newNameserver = it },
-                    label = { Text("Endpoint URL") },
-                    placeholder = { Text("https://dns.google/dns-query") },
+                    label = { Text(stringResource(R.string.label_endpoint_url)) },
+                    placeholder = { Text(stringResource(R.string.placeholder_endpoint_url)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium
                 )
@@ -135,12 +138,12 @@ fun DnsScreen(
                         showAddDialog = false
                     }
                 }) {
-                    Text("Add")
+                    Text(stringResource(R.string.action_add))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAddDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
