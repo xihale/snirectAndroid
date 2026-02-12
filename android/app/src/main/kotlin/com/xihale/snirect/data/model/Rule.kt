@@ -26,13 +26,6 @@ data class CertVerifyRule(
 )
 
 @Serializable
-data class RuleConfig(
-    val rules: List<Rule>? = null
-) {
-    fun getRulesList(): List<Rule> = rules ?: emptyList()
-}
-
-@Serializable
 data class CoreConfig(
     @SerialName("rules") val rules: List<Rule>? = null,
     @SerialName("cert_verify") val certVerify: List<CertVerifyRule>? = null,

@@ -177,97 +177,114 @@ func GetCACertificate() []byte {
 	return nil
 }
 
-func parseURLHostname(urlStr string) (string, error) {
-	u, err := url.Parse(urlStr)
-	if err != nil {
-		return "", err
+func UpdateRules(configStr string) error {
+	var config Config
+	if err := json.Unmarshal([]byte(configStr), &config); err != nil {
+		return err
 	}
-	hostname := u.Hostname()
-	if hostname == "" {
-		return "", fmt.Errorf("no hostname found in URL")
-	}
-	return hostname, nil
+	globalEngine.mu.Lock()
+	globalEngine.rules = config.Rules
+	globalEngine.certVerify = config.CertVerify
+	globalEngine.mu.Unlock()
+	LogInfo("CORE: Rules updated (%d rules)", len(config.Rules))
+	return nil
 }
 
 func FetchRemote(urlStr string) (string, error) {
 	LogInfo("CORE: FetchRemote called for %s", urlStr)
 
-	// Parse URL to extract hostname
-	var hostname string
-	var targetSNI, targetIP string
-
-	// Extract hostname from URL
-	if u, err := parseURLHostname(urlStr); err == nil {
-		hostname = u
-		LogDebug("FetchRemote: Extracted hostname %s", hostname)
-	} else {
-		LogError("FetchRemote: Failed to parse hostname from %s: %v", urlStr, err)
-		return "", fmt.Errorf("invalid URL: %v", err)
+	currentURL := urlStr
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // Handle redirects manually
+		},
+		Timeout: 10 * time.Second,
 	}
 
-	// Try to find matching rule via globalEngine
-	rule := globalEngine.Match(hostname)
-	if rule != nil {
-		// Apply rule's SNI and IP overrides if they exist
-		if rule.TargetSNI != nil {
-			targetSNI = *rule.TargetSNI
-			LogInfo("FetchRemote: Using rule SNI: %s", targetSNI)
+	for i := 0; i < 10; i++ {
+		// Parse URL to extract hostname
+		u, err := url.Parse(currentURL)
+		if err != nil {
+			LogError("FetchRemote: Failed to parse URL %s: %v", currentURL, err)
+			return "", err
+		}
+		hostname := u.Hostname()
+
+		var targetSNI, targetIP string
+		rule := globalEngine.Match(hostname)
+		if rule != nil {
+			if rule.TargetSNI != nil {
+				targetSNI = *rule.TargetSNI
+				LogInfo("FetchRemote: Using rule SNI: %s for %s", targetSNI, hostname)
+			} else {
+				targetSNI = hostname
+			}
+			if rule.TargetIP != nil {
+				targetIP = *rule.TargetIP
+				LogInfo("FetchRemote: Using rule IP: %s for %s", targetIP, hostname)
+			}
 		} else {
 			targetSNI = hostname
 		}
-		if rule.TargetIP != nil {
-			targetIP = *rule.TargetIP
-			LogInfo("FetchRemote: Using rule IP: %s", targetIP)
-		}
-	} else {
-		// No matching rule, use original hostname
-		targetSNI = hostname
-		LogDebug("FetchRemote: No matching rule, using original hostname for SNI")
-	}
 
-	dialer := getProtectedDialer()
-
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			actualAddr := addr
-			if targetIP != "" {
-				_, port, err := net.SplitHostPort(addr)
-				if err == nil {
-					actualAddr = net.JoinHostPort(targetIP, port)
-				} else {
-					actualAddr = net.JoinHostPort(targetIP, "443")
+		dialer := getProtectedDialer()
+		transport := &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				actualAddr := addr
+				if targetIP != "" {
+					_, port, err := net.SplitHostPort(addr)
+					if err == nil {
+						actualAddr = net.JoinHostPort(targetIP, port)
+					} else {
+						actualAddr = net.JoinHostPort(targetIP, "443")
+					}
+					LogDebug("FetchRemote: Overriding IP %s -> %s", addr, actualAddr)
 				}
-				LogDebug("FetchRemote: Overriding IP %s -> %s", addr, actualAddr)
+				return dialer.DialContext(ctx, network, actualAddr)
+			},
+			TLSClientConfig: &tls.Config{
+				ServerName:         targetSNI,
+				InsecureSkipVerify: true,
+			},
+		}
+		client.Transport = transport
+
+		resp, err := client.Get(currentURL)
+		if err != nil {
+			LogError("FetchRemote: Get failed for %s: %v", currentURL, err)
+			return "", err
+		}
+
+		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+			location := resp.Header.Get("Location")
+			resp.Body.Close()
+			if location == "" {
+				return "", fmt.Errorf("redirect without location")
 			}
-			return dialer.DialContext(ctx, network, actualAddr)
-		},
-		TLSClientConfig: &tls.Config{
-			ServerName:         targetSNI,
-			InsecureSkipVerify: true,
-		},
+			// Resolve relative URL
+			nextURL, err := u.Parse(location)
+			if err != nil {
+				return "", err
+			}
+			currentURL = nextURL.String()
+			LogInfo("FetchRemote: Redirecting to %s", currentURL)
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return "", fmt.Errorf("HTTP %s", resp.Status)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return "", err
+		}
+
+		LogInfo("FetchRemote: Success, read %d bytes", len(body))
+		return string(body), nil
 	}
 
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   30 * time.Second,
-	}
-
-	resp, err := client.Get(urlStr)
-	if err != nil {
-		LogError("FetchRemote: Get failed: %v", err)
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %s", resp.Status)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	LogInfo("FetchRemote: Success, read %d bytes", len(body))
-	return string(body), nil
+	return "", fmt.Errorf("too many redirects")
 }

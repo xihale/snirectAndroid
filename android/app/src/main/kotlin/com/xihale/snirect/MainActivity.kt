@@ -246,9 +246,6 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         AppLogger.i("Auto-activation: Skipped (shouldActivate=$shouldActivate, isRunning=${viewModel.isRunning})")
                     }
-                    
-                    kotlinx.coroutines.delay(5000)
-                    verifyPixiv()
                 }
 
                 Surface(
@@ -285,61 +282,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-        }
-    }
-
-    private fun verifyPixiv() {
-        AppLogger.i("Verification: Sending request to pixiv.net and google.com...")
-        kotlinx.coroutines.MainScope().launch(kotlinx.coroutines.Dispatchers.IO) {
-            val caBytes = core.Core.getCACertificate()
-            
-            val trustAllClient = okhttp3.OkHttpClient.Builder()
-                .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                .hostnameVerifier { _, _ -> true }
-                .sslSocketFactory(createTrustAllSslSocketFactory(), createTrustAllManager())
-                .dns(object : okhttp3.Dns {
-                    override fun lookup(hostname: String): List<java.net.InetAddress> {
-                        val all = okhttp3.Dns.SYSTEM.lookup(hostname)
-                        val ipv4 = all.filter { it is java.net.Inet4Address }
-                        return ipv4.ifEmpty { all }
-                    }
-                })
-                .build()
-
-            // Verify Pixiv
-            try {
-                val request = okhttp3.Request.Builder().url("https://www.pixiv.net").build()
-                trustAllClient.newCall(request).execute().use { response ->
-                    AppLogger.i("Verification SUCCESS: pixiv.net returned ${response.code}")
-                }
-            } catch (e: Exception) {
-                AppLogger.e("Verification ERROR: pixiv.net failed", e)
-            }
-
-            // Verify Google (to trigger cert_verify)
-            try {
-                val request = okhttp3.Request.Builder().url("https://www.google.com").build()
-                trustAllClient.newCall(request).execute().use { response ->
-                    AppLogger.i("Verification SUCCESS: google.com returned ${response.code}")
-                }
-            } catch (e: Exception) {
-                AppLogger.e("Verification ERROR: google.com failed", e)
-            }
-        }
-    }
-
-    private fun createTrustAllSslSocketFactory(): javax.net.ssl.SSLSocketFactory {
-        val sc = javax.net.ssl.SSLContext.getInstance("SSL")
-        sc.init(null, arrayOf(createTrustAllManager()), java.security.SecureRandom())
-        return sc.socketFactory
-    }
-
-    private fun createTrustAllManager(): javax.net.ssl.X509TrustManager {
-        return object : javax.net.ssl.X509TrustManager {
-            override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
-            override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
-            override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
         }
     }
 }
@@ -386,7 +328,15 @@ fun SnirectApp(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.startVpn(context)
+            scope.launch {
+                val skipCheck = repository.skipCertCheck.first()
+                if (skipCheck || CertUtil.isCaCertInstalled()) {
+                    viewModel.startVpn(context)
+                } else {
+                    AppLogger.w("VPN Launcher: Blocked - CA certificate not installed")
+                    Toast.makeText(context, context.getString(R.string.toast_cert_install_required), Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -394,7 +344,15 @@ fun SnirectApp(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            viewModel.startVpn(context)
+            scope.launch {
+                val skipCheck = repository.skipCertCheck.first()
+                if (skipCheck || CertUtil.isCaCertInstalled()) {
+                    viewModel.startVpn(context)
+                } else {
+                    AppLogger.w("Notif Launcher: Blocked - CA certificate not installed")
+                    Toast.makeText(context, context.getString(R.string.toast_cert_install_required), Toast.LENGTH_LONG).show()
+                }
+            }
         } else {
             Toast.makeText(context, context.getString(R.string.toast_notif_permission_required), Toast.LENGTH_SHORT).show()
         }

@@ -1,20 +1,17 @@
 # Default local rules (User overrides)
 # Priority: High
 
-[[rules]]
-patterns = ["*google*"]
-target_sni = "" # Strip SNI since www.google.com is not allowed and g.cn fails
-target_ip = ""
-cert_verify = false # Must disable verification if we strip SNI (or use a domain that matches the IP's cert, but we don't know it)
+[alter_hostname]
+"*google*" = "" # Strip SNI since www.google.com is not allowed and g.cn fails
+"*duckduckgo*" = "" # Strip SNI
+"*pixiv.net" = "www.pixiv.net"
+"pximg.net" = "www.pixiv.net"
 
-[[rules]]
-patterns = ["*duckduckgo*"]
-target_sni = "" # Strip SNI
-target_ip = ""
-cert_verify = false
+[hosts]
+"*pixiv.net" = "210.140.131.199"
 
-[[rules]]
-patterns = ["*pixiv.net", "pximg.net"]
-target_sni = "www.pixiv.net"
-target_ip = ""
-cert_verify = "www.pixiv.net"
+[cert_verify]
+"*google*" = "false"
+"*duckduckgo*" = "false"
+"*pixiv.net" = "www.pixiv.net"
+"pximg.net" = "www.pixiv.net"

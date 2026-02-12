@@ -70,4 +70,23 @@ data class TomlRuleConfig(
         
         return rules
     }
+
+    companion object {
+        fun fromRulesList(rules: List<Rule>): TomlRuleConfig {
+            val alterHostname = mutableMapOf<String, String>()
+            val certVerify = mutableMapOf<String, String>()
+            val hosts = mutableMapOf<String, String>()
+
+            for (rule in rules) {
+                val patterns = rule.patterns ?: emptyList()
+                for (pattern in patterns) {
+                    // Only add to map if value is not null (legacy Rule uses null for original/none)
+                    rule.targetSni?.let { alterHostname[pattern] = it }
+                    rule.targetIp?.let { hosts[pattern] = it }
+                    rule.certVerify?.let { certVerify[pattern] = it }
+                }
+            }
+            return TomlRuleConfig(alterHostname, certVerify, hosts)
+        }
+    }
 }
