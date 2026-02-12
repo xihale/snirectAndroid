@@ -141,4 +141,12 @@
     <!-- Service & Notification -->
     <string name="notification_channel_name">VPN 状态</string>
     <string name="notification_title">Snirect VPN</string>
+    <!-- Remote Rules Management -->
+    <string name="remote_rules_title">远程规则管理</string>
+    <string name="action_sync_remote">同步远程规则</string>
+    <string name="label_update_url">更新链接</string>
+    <string name="placeholder_update_url">https://example.com/rules.toml</string>
+    <string name="hint_spoofing_download">下载时使用 Fake SNI 绕过拦截</string>
+    <string name="toast_syncing">正在同步规则...</string>
+    <string name="toast_sync_success">规则同步成功</string>
 </resources>

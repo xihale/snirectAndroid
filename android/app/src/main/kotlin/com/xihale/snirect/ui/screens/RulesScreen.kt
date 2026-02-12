@@ -8,7 +8,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,15 +44,26 @@ fun RulesScreen(
     var rulesWithSource by remember { mutableStateOf<List<RuleWithSource>>(emptyList()) }
     var showDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf<Rule?>(null) }
+    var showSyncDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var updateUrl by remember { mutableStateOf("") }
+    var updateSni by remember { mutableStateOf("") }
+    var updateIp by remember { mutableStateOf("") }
     
     var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         rulesWithSource = repository.getAllRulesWithSource()
         repository.updateUrl.collect { updateUrl = it }
+    }
+    
+    LaunchedEffect(Unit) {
+        repository.updateSni.collect { updateSni = it }
+    }
+    
+    LaunchedEffect(Unit) {
+        repository.updateIp.collect { updateIp = it }
     }
 
     val filteredRules = remember(rulesWithSource, searchQuery) {
@@ -103,10 +115,10 @@ fun RulesScreen(
     fun fetchRules() {
         scope.launch {
             try {
-                Toast.makeText(context, context.getString(R.string.toast_fetching_rules), Toast.LENGTH_SHORT).show()
-                repository.fetchRemoteRules(updateUrl)
+                Toast.makeText(context, context.getString(R.string.toast_syncing), Toast.LENGTH_SHORT).show()
+                repository.fetchRemoteRules(updateUrl, updateSni, updateIp)
                 rulesWithSource = repository.getAllRulesWithSource()
-                Toast.makeText(context, context.getString(R.string.toast_rules_updated), Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.toast_sync_success), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(context, context.getString(R.string.toast_error, e.message), Toast.LENGTH_LONG).show()
             }
@@ -124,8 +136,8 @@ fun RulesScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { fetchRules() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.action_update_rules))
+                        IconButton(onClick = { showSyncDialog = true }) {
+                            Icon(Icons.Default.CloudDownload, contentDescription = stringResource(R.string.remote_rules_title))
                         }
                     }
                 )
@@ -189,6 +201,85 @@ fun RulesScreen(
             }
         )
     }
+
+    if (showSyncDialog) {
+        RemoteSyncDialog(
+            url = updateUrl,
+            sni = updateSni,
+            ip = updateIp,
+            onDismiss = { showSyncDialog = false },
+            onSave = { newUrl, newSni, newIp ->
+                scope.launch {
+                    repository.setUpdateUrl(newUrl)
+                    repository.setUpdateSni(newSni)
+                    repository.setUpdateIp(newIp)
+                    showSyncDialog = false
+                    fetchRules()
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun RemoteSyncDialog(
+    url: String,
+    sni: String,
+    ip: String,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit
+) {
+    var tempUrl by remember { mutableStateOf(url) }
+    var tempSni by remember { mutableStateOf(sni) }
+    var tempIp by remember { mutableStateOf(ip) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.remote_rules_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = tempUrl,
+                    onValueChange = { tempUrl = it },
+                    label = { Text(stringResource(R.string.label_update_url)) },
+                    placeholder = { Text(stringResource(R.string.placeholder_update_url)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = tempSni,
+                    onValueChange = { tempSni = it },
+                    label = { Text(stringResource(R.string.rule_label_sni)) },
+                    placeholder = { Text(stringResource(R.string.rule_placeholder_sni)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = tempIp,
+                    onValueChange = { tempIp = it },
+                    label = { Text(stringResource(R.string.rule_label_ip)) },
+                    placeholder = { Text(stringResource(R.string.rule_placeholder_ip)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Text(
+                    text = stringResource(R.string.hint_spoofing_download),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(tempUrl, tempSni, tempIp) }) {
+                Text(stringResource(R.string.action_sync_remote))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        }
+    )
 }
 
 @Composable

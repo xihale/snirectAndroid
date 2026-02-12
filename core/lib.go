@@ -1,11 +1,15 @@
 package core
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -170,4 +174,54 @@ func GetCACertificate() []byte {
 	}
 
 	return nil
+}
+
+func FetchRemote(urlStr string, targetSNI string, targetIP string) (string, error) {
+	LogInfo("CORE: FetchRemote called for %s (SNI: %s, IP: %s)", urlStr, targetSNI, targetIP)
+
+	dialer := getProtectedDialer()
+
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			actualAddr := addr
+			if targetIP != "" {
+				_, port, err := net.SplitHostPort(addr)
+				if err == nil {
+					actualAddr = net.JoinHostPort(targetIP, port)
+				} else {
+					actualAddr = net.JoinHostPort(targetIP, "443")
+				}
+				LogDebug("FetchRemote: Overriding IP %s -> %s", addr, actualAddr)
+			}
+			return dialer.DialContext(ctx, network, actualAddr)
+		},
+		TLSClientConfig: &tls.Config{
+			ServerName:         targetSNI,
+			InsecureSkipVerify: true,
+		},
+	}
+
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}
+
+	resp, err := client.Get(urlStr)
+	if err != nil {
+		LogError("FetchRemote: Get failed: %v", err)
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %s", resp.Status)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	LogInfo("FetchRemote: Success, read %d bytes", len(body))
+	return string(body), nil
 }

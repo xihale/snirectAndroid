@@ -141,4 +141,12 @@
     <!-- Service & Notification -->
     <string name="notification_channel_name">VPN Status</string>
     <string name="notification_title">Snirect VPN</string>
+    <!-- Remote Rules Management -->
+    <string name="remote_rules_title">Remote Rules</string>
+    <string name="action_sync_remote">Sync Remote Rules</string>
+    <string name="label_update_url">Update URL</string>
+    <string name="placeholder_update_url">https://example.com/rules.toml</string>
+    <string name="hint_spoofing_download">Uses spoofing to bypass blocks during download</string>
+    <string name="toast_syncing">Syncing rules...</string>
+    <string name="toast_sync_success">Rules synced successfully</string>
 </resources>

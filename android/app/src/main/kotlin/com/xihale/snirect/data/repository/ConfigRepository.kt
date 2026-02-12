@@ -50,6 +50,8 @@ class ConfigRepository(private val context: Context) {
         val KEY_CHECK_HOSTNAME = booleanPreferencesKey("check_hostname")
         
         val KEY_UPDATE_URL = stringPreferencesKey("update_url")
+        val KEY_UPDATE_SNI = stringPreferencesKey("update_sni")
+        val KEY_UPDATE_IP = stringPreferencesKey("update_ip")
         val KEY_MTU = intPreferencesKey("mtu")
         val KEY_ENABLE_IPV6 = booleanPreferencesKey("enable_ipv6")
         val KEY_LOG_LEVEL = stringPreferencesKey("log_level")
@@ -81,6 +83,8 @@ class ConfigRepository(private val context: Context) {
     }
 
     val updateUrl: Flow<String> = context.dataStore.data.map { it[KEY_UPDATE_URL] ?: DEFAULT_UPDATE_URL }
+    val updateSni: Flow<String> = context.dataStore.data.map { it[KEY_UPDATE_SNI] ?: "" }
+    val updateIp: Flow<String> = context.dataStore.data.map { it[KEY_UPDATE_IP] ?: "" }
     val mtu: Flow<Int> = context.dataStore.data.map { it[KEY_MTU] ?: 1500 }
     val enableIpv6: Flow<Boolean> = context.dataStore.data.map { it[KEY_ENABLE_IPV6] ?: false }
     val logLevel: Flow<String> = context.dataStore.data.map { it[KEY_LOG_LEVEL] ?: "debug" }
@@ -100,6 +104,8 @@ class ConfigRepository(private val context: Context) {
     suspend fun setCheckHostname(check: Boolean) = context.dataStore.edit { it[KEY_CHECK_HOSTNAME] = check }
     
     suspend fun setUpdateUrl(url: String) = context.dataStore.edit { it[KEY_UPDATE_URL] = url }
+    suspend fun setUpdateSni(sni: String) = context.dataStore.edit { it[KEY_UPDATE_SNI] = sni }
+    suspend fun setUpdateIp(ip: String) = context.dataStore.edit { it[KEY_UPDATE_IP] = ip }
     suspend fun setMtu(mtu: Int) = context.dataStore.edit { it[KEY_MTU] = mtu }
     suspend fun setEnableIpv6(enable: Boolean) = context.dataStore.edit { it[KEY_ENABLE_IPV6] = enable }
     suspend fun setLogLevel(level: String) = context.dataStore.edit { it[KEY_LOG_LEVEL] = level }
@@ -244,12 +250,22 @@ class ConfigRepository(private val context: Context) {
         }
     }
 
-    suspend fun fetchRemoteRules(urlStr: String): List<Rule> = withContext(Dispatchers.IO) {
+    suspend fun fetchRemoteRules(urlStr: String, sni: String = "", ip: String = ""): List<Rule> = withContext(Dispatchers.IO) {
         try {
-            val content = URL(urlStr).readText()
+            val content = if (sni.isNotEmpty() || ip.isNotEmpty()) {
+                AppLogger.i("Fetching remote rules using spoofing: SNI=$sni, IP=$ip")
+                core.Core.fetchRemote(urlStr, sni, ip)
+            } else {
+                try {
+                    core.Core.fetchRemote(urlStr, "", "")
+                } catch (e: Exception) {
+                    AppLogger.w("Core fetch failed, falling back to system fetch: ${e.message}")
+                    URL(urlStr).readText()
+                }
+            }
             
             val rules = if (urlStr.endsWith(".toml", ignoreCase = true)) {
-                AppLogger.i("Fetching TOML rules from: $urlStr")
+                AppLogger.i("Parsing TOML rules")
                 val tomlConfig = toml.decodeFromString(TomlRuleConfig.serializer(), content)
                 tomlConfig.toRulesList()
             } else if (urlStr.endsWith(".json", ignoreCase = true)) {

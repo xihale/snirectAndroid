@@ -264,13 +264,6 @@ fun SettingsScreen(
                     subtitle = stringResource(R.string.setting_traffic_rules_desc),
                     onClick = { navController.navigate("rules") }
                 )
-
-                SettingsTile(
-                    icon = AppIcons.Update,
-                    title = stringResource(R.string.setting_update_url),
-                    subtitle = updateUrl,
-                    onClick = null
-                )
             }
 
             SettingsGroup(title = stringResource(R.string.group_logging_debug)) {
