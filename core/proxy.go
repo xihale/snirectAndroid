@@ -70,15 +70,28 @@ func handleProxyConnection(localConn net.Conn, targetAddr string, cb EngineCallb
 	var shouldMITM bool = false
 
 	if matchedRule != nil {
-		shouldMITM = true
+		// Only MITM if SNI changed. If only TargetIP is present or TargetSNI matches original,
+		// we use forwardDirect to preserve end-to-end encryption and performance.
+		
+		sniChanged := false
 		if matchedRule.TargetSNI != nil {
 			targetSNI = *matchedRule.TargetSNI
-			if targetSNI == "" {
-				LogInfo("HTTPS SNI: %s -> <STRIP>", sni)
-			} else {
-				LogInfo("HTTPS SNI: %s -> %s", sni, targetSNI)
+			if targetSNI != sni {
+				sniChanged = true
 			}
 		}
+
+		if sniChanged {
+			shouldMITM = true
+			if targetSNI == "" {
+				LogInfo("HTTPS SNI: %s -> <STRIP> (MITM REQUIRED)", sni)
+			} else {
+				LogInfo("HTTPS SNI: %s -> %s (MITM REQUIRED)", sni, targetSNI)
+			}
+		} else {
+			LogInfo("HTTPS SNI: %s (SNI unchanged, NO MITM)", sni)
+		}
+
 		if matchedRule.TargetIP != nil && *matchedRule.TargetIP != "" {
 			host, port, err := net.SplitHostPort(targetAddr)
 			if err != nil {

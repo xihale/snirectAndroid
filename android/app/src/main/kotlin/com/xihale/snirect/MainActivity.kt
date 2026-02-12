@@ -276,6 +276,9 @@ class MainActivity : AppCompatActivity() {
                         composable("rules") {
                             RulesScreen(navController = navController, repository = repository)
                         }
+                        composable("app_whitelist") {
+                            AppWhitelistScreen(navController = navController, repository = repository)
+                        }
                         composable("logs") {
                             LogsScreen(navController = navController)
                         }

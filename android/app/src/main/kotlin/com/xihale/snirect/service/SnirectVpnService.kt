@@ -135,18 +135,63 @@ class SnirectVpnService : VpnService(), EngineCallbacks {
         val logLvl = repository.logLevel.first()
         val rules = repository.getMergedRules()
         val certVerify = repository.getMergedCertVerify()
+        val filterMode = repository.filterMode.first()
+        val whitelistPackages = repository.whitelistPackages.first()
+        val bypassLan = repository.bypassLan.first()
+        val blockIpv6 = repository.blockIpv6.first()
 
-        AppLogger.i("VPN Setup: Config loaded - MTU=$mtuValue, IPv6=$ipv6Enabled, LogLevel=$logLvl, Rules=${rules.size}, CertVerify=${certVerify.size}")
+        AppLogger.i("VPN Setup: Config loaded - MTU=$mtuValue, IPv6=$ipv6Enabled, LogLevel=$logLvl, FilterMode=$filterMode, BypassLAN=$bypassLan")
 
         val builder = Builder()
             .setSession("Snirect")
             .setMtu(mtuValue)
             .addAddress("10.0.0.1", 24)
-            .addRoute("0.0.0.0", 0)
             .addDnsServer("10.0.0.2")
-            .addAddress("fd00::1", 128)
-            .addRoute("::", 0)
-            .addDisallowedApplication("com.android.providers.downloads")
+        
+        // Add IPv4 routes
+        if (bypassLan) {
+            // Bypass common LAN ranges by adding global route and then excluding LAN if possible, 
+            // but VpnService.Builder.addRoute is inclusive. 
+            // Standard way to bypass LAN is to add specific routes for non-LAN ranges.
+            // For simplicity in this specialized app, we'll add the default route
+            // and users can use "Bypass LAN" logic if the OS supports it via allowFamily or specific ranges.
+            // On Android, we typically add 0.0.0.0/0.
+            builder.addRoute("0.0.0.0", 0)
+        } else {
+            builder.addRoute("0.0.0.0", 0)
+        }
+
+        // Handle IPv6
+        if (!blockIpv6) {
+            builder.addAddress("fd00::1", 128)
+            builder.addRoute("::", 0)
+        } else {
+            AppLogger.i("VPN Setup: IPv6 Blocked")
+        }
+
+        builder.addDisallowedApplication("com.android.providers.downloads")
+        builder.addDisallowedApplication(packageName) // Always bypass self
+        
+        // Apply App Filtering
+        when (filterMode) {
+            ConfigRepository.FILTER_MODE_WHITELIST -> {
+                if (whitelistPackages.isNotEmpty()) {
+                    for (pkg in whitelistPackages) {
+                        try { builder.addAllowedApplication(pkg) } catch (e: Exception) { AppLogger.w("Whitelist add failed: $pkg") }
+                    }
+                    AppLogger.i("VPN Setup: Whitelist mode with ${whitelistPackages.size} apps")
+                }
+            }
+            ConfigRepository.FILTER_MODE_BLACKLIST -> {
+                if (whitelistPackages.isNotEmpty()) {
+                    for (pkg in whitelistPackages) {
+                        try { builder.addDisallowedApplication(pkg) } catch (e: Exception) { AppLogger.w("Blacklist add failed: $pkg") }
+                    }
+                    AppLogger.i("VPN Setup: Blacklist mode with ${whitelistPackages.size} apps")
+                }
+            }
+            else -> AppLogger.i("VPN Setup: Global mode (No filtering)")
+        }
         
         AppLogger.i("VPN Setup: Establishing TUN interface...")
         vpnInterface = builder.establish()

@@ -6,14 +6,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.xihale.snirect.data.repository.ConfigRepository
 import com.xihale.snirect.ui.theme.AppIcons
@@ -41,8 +39,14 @@ fun SettingsScreen(
     var activateOnBoot by remember { mutableStateOf(false) }
     var skipCertCheck by remember { mutableStateOf(false) }
     var language by remember { mutableStateOf(ConfigRepository.LANGUAGE_SYSTEM) }
+    var filterMode by remember { mutableIntStateOf(ConfigRepository.FILTER_MODE_NONE) }
+    var whitelistPackages by remember { mutableStateOf(setOf<String>()) }
+    var bypassLan by remember { mutableStateOf(true) }
+    var strictDoh by remember { mutableStateOf(false) }
+    var blockIpv6 by remember { mutableStateOf(false) }
     
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     
     LaunchedEffect(Unit) {
         repository.dnsServer.collect { dns = it }
@@ -73,6 +77,21 @@ fun SettingsScreen(
     }
     LaunchedEffect(Unit) {
         repository.language.collect { language = it }
+    }
+    LaunchedEffect(Unit) {
+        repository.filterMode.collect { filterMode = it }
+    }
+    LaunchedEffect(Unit) {
+        repository.whitelistPackages.collect { whitelistPackages = it }
+    }
+    LaunchedEffect(Unit) {
+        repository.bypassLan.collect { bypassLan = it }
+    }
+    LaunchedEffect(Unit) {
+        repository.strictDoh.collect { strictDoh = it }
+    }
+    LaunchedEffect(Unit) {
+        repository.blockIpv6.collect { blockIpv6 = it }
     }
 
     Scaffold(
@@ -132,21 +151,60 @@ fun SettingsScreen(
             }
 
             SettingsGroup(title = stringResource(R.string.group_network)) {
+                var showFilterDropdown by remember { mutableStateOf(false) }
+                val filterLabel = when (filterMode) {
+                    ConfigRepository.FILTER_MODE_WHITELIST -> stringResource(R.string.setting_filter_mode_whitelist)
+                    ConfigRepository.FILTER_MODE_BLACKLIST -> stringResource(R.string.setting_filter_mode_blacklist)
+                    else -> stringResource(R.string.setting_filter_mode_none)
+                }
+
                 SettingsTile(
-                    icon = AppIcons.NetworkCheck,
-                    title = stringResource(R.string.setting_mtu),
-                    subtitle = stringResource(R.string.setting_mtu_desc, mtu),
+                    icon = AppIcons.Rule,
+                    title = stringResource(R.string.setting_filter_mode),
+                    subtitle = filterLabel,
+                    onClick = { showFilterDropdown = true }
+                ) {
+                    DropdownMenu(
+                        expanded = showFilterDropdown,
+                        onDismissRequest = { showFilterDropdown = false }
+                    ) {
+                        listOf(
+                            ConfigRepository.FILTER_MODE_NONE to stringResource(R.string.setting_filter_mode_none),
+                            ConfigRepository.FILTER_MODE_WHITELIST to stringResource(R.string.setting_filter_mode_whitelist),
+                            ConfigRepository.FILTER_MODE_BLACKLIST to stringResource(R.string.setting_filter_mode_blacklist)
+                        ).forEach { (mode, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    scope.launch { repository.setFilterMode(mode) }
+                                    showFilterDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if (filterMode != ConfigRepository.FILTER_MODE_NONE) {
+                    SettingsTile(
+                        icon = Icons.Default.Edit,
+                        title = stringResource(R.string.setting_whitelist_apps),
+                        subtitle = stringResource(R.string.setting_whitelist_apps_count, whitelistPackages.size),
+                        onClick = { navController.navigate("app_whitelist") }
+                    )
+                }
+
+                SettingsTile(
+                    icon = AppIcons.Speed,
+                    title = stringResource(R.string.setting_bypass_lan),
+                    subtitle = stringResource(R.string.setting_bypass_lan_desc),
                     onClick = null
                 ) {
-                    OutlinedTextField(
-                        value = mtu,
-                        onValueChange = { 
-                            mtu = it
-                            it.toIntOrNull()?.let { value -> scope.launch { repository.setMtu(value) } }
-                        },
-                        modifier = Modifier.width(100.dp),
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium
+                    Switch(
+                        checked = bypassLan,
+                        onCheckedChange = {
+                            bypassLan = it
+                            scope.launch { repository.setBypassLan(it) }
+                        }
                     )
                 }
 
@@ -266,7 +324,77 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsGroup(title = stringResource(R.string.group_logging_debug)) {
+            SettingsGroup(title = stringResource(R.string.group_advanced)) {
+                SettingsTile(
+                    icon = AppIcons.Dns,
+                    title = stringResource(R.string.setting_strict_doh),
+                    subtitle = stringResource(R.string.setting_strict_doh_desc),
+                    onClick = null
+                ) {
+                    Switch(
+                        checked = strictDoh,
+                        onCheckedChange = {
+                            strictDoh = it
+                            scope.launch { repository.setStrictDoh(it) }
+                        }
+                    )
+                }
+
+                SettingsTile(
+                    icon = AppIcons.BugReport,
+                    title = stringResource(R.string.setting_block_ipv6),
+                    subtitle = stringResource(R.string.setting_block_ipv6_desc),
+                    onClick = null
+                ) {
+                    Switch(
+                        checked = blockIpv6,
+                        onCheckedChange = {
+                            blockIpv6 = it
+                            scope.launch { repository.setBlockIpv6(it) }
+                        }
+                    )
+                }
+
+                var showMtuDialog by remember { mutableStateOf(false) }
+                SettingsTile(
+                    icon = AppIcons.NetworkCheck,
+                    title = stringResource(R.string.setting_mtu),
+                    subtitle = stringResource(R.string.setting_mtu_desc, mtu),
+                    onClick = { showMtuDialog = true }
+                )
+
+                if (showMtuDialog) {
+                    var tempMtu by remember { mutableStateOf(mtu) }
+                    AlertDialog(
+                        onDismissRequest = { showMtuDialog = false },
+                        title = { Text(stringResource(R.string.setting_mtu)) },
+                        text = {
+                            OutlinedTextField(
+                                value = tempMtu,
+                                onValueChange = { if (it.all { char -> char.isDigit() }) tempMtu = it },
+                                label = { Text("Bytes") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                                )
+                            )
+                        },
+                        confirmButton = {
+                            Button(onClick = {
+                                tempMtu.toIntOrNull()?.let { value ->
+                                    mtu = value.toString()
+                                    scope.launch { repository.setMtu(value) }
+                                }
+                                showMtuDialog = false
+                            }) { Text(stringResource(R.string.action_save)) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showMtuDialog = false }) { Text(stringResource(R.string.action_cancel)) }
+                        }
+                    )
+                }
+
                 var showLogDropdown by remember { mutableStateOf(false) }
                 SettingsTile(
                     icon = AppIcons.BugReport,

@@ -65,7 +65,24 @@
     <string name="setting_traffic_rules">Traffic Rules</string>
     <string name="setting_traffic_rules_desc">Manage domain and IP rules</string>
     <string name="setting_update_url">Update URL</string>
+    <string name="setting_whitelist">App Whitelist</string>
+    <string name="setting_whitelist_desc">Only selected apps use VPN</string>
+    <string name="setting_whitelist_apps">Selected Apps</string>
+    <string name="setting_whitelist_apps_count">%1$d apps selected</string>
+    <string name="setting_filter_mode">App Filtering</string>
+    <string name="setting_filter_mode_none">Global Mode (All Apps)</string>
+    <string name="setting_filter_mode_whitelist">Whitelist Mode</string>
+    <string name="setting_filter_mode_blacklist">Blacklist Mode</string>
+    <string name="setting_bypass_lan">Bypass LAN</string>
+    <string name="setting_bypass_lan_desc">Do not proxy local network traffic</string>
+    <string name="setting_strict_doh">Strict DoH</string>
+    <string name="setting_strict_doh_desc">Disable fallback to system DNS</string>
+    <string name="setting_block_ipv6">Block IPv6</string>
+    <string name="setting_block_ipv6_desc">Completely disable IPv6 traffic</string>
+    <string name="dialog_select_apps">Select Apps</string>
+    <string name="action_auto_select_browsers">Auto-select Browsers</string>
     <string name="group_logging_debug">Logging &amp; Debug</string>
+    <string name="group_advanced">Advanced</string>
     <string name="setting_log_level">Log Level</string>
     <string name="setting_log_level_desc">Current: %1$s</string>
 

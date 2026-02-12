@@ -62,8 +62,17 @@ class ConfigRepository(
         val KEY_HAS_SHOWN_HELP = booleanPreferencesKey("has_shown_help")
         val KEY_SKIP_CERT_CHECK = booleanPreferencesKey("skip_cert_check")
         val KEY_LANGUAGE = stringPreferencesKey("language")
+        val KEY_FILTER_MODE = intPreferencesKey("filter_mode") // 0: None, 1: Whitelist, 2: Blacklist
+        val KEY_WHITELIST_PACKAGES = stringPreferencesKey("whitelist_packages")
+        val KEY_BYPASS_LAN = booleanPreferencesKey("bypass_lan")
+        val KEY_STRICT_DOH = booleanPreferencesKey("strict_doh")
+        val KEY_BLOCK_IPV6 = booleanPreferencesKey("block_ipv6")
 
-        const val DEFAULT_NAMESERVERS = "https://dnschina1.soraharu.com/dns-query,https://77.88.8.8/dns-query,https://dns.google/dns-query"
+        const val FILTER_MODE_NONE = 0
+        const val FILTER_MODE_WHITELIST = 1
+        const val FILTER_MODE_BLACKLIST = 2
+
+        const val DEFAULT_NAMESERVERS = "https://dnschina1.soraharu.com/dns-query,https://77.88.8.8/dns-query"
         const val DEFAULT_BOOTSTRAP_DNS = "tls://223.5.5.5"
         const val DEFAULT_UPDATE_URL = "https://github.com/SpaceTimee/Cealing-Host/releases/latest/download/Cealing-Host.toml"
         const val LANGUAGE_SYSTEM = "system"
@@ -96,6 +105,13 @@ class ConfigRepository(
     val hasShownHelp: Flow<Boolean> = context.dataStore.data.map { it[KEY_HAS_SHOWN_HELP] ?: false }
     val skipCertCheck: Flow<Boolean> = context.dataStore.data.map { it[KEY_SKIP_CERT_CHECK] ?: false }
     val language: Flow<String> = context.dataStore.data.map { it[KEY_LANGUAGE] ?: LANGUAGE_SYSTEM }
+    val filterMode: Flow<Int> = context.dataStore.data.map { it[KEY_FILTER_MODE] ?: FILTER_MODE_NONE }
+    val whitelistPackages: Flow<Set<String>> = context.dataStore.data.map { 
+        it[KEY_WHITELIST_PACKAGES]?.split(",")?.filter { p -> p.isNotBlank() }?.toSet() ?: emptySet() 
+    }
+    val bypassLan: Flow<Boolean> = context.dataStore.data.map { it[KEY_BYPASS_LAN] ?: true }
+    val strictDoh: Flow<Boolean> = context.dataStore.data.map { it[KEY_STRICT_DOH] ?: false }
+    val blockIpv6: Flow<Boolean> = context.dataStore.data.map { it[KEY_BLOCK_IPV6] ?: false }
 
     suspend fun setNameservers(servers: List<String>) =
         context.dataStore.edit {
@@ -128,6 +144,27 @@ class ConfigRepository(
     suspend fun setSkipCertCheck(skip: Boolean) = context.dataStore.edit { it[KEY_SKIP_CERT_CHECK] = skip }
 
     suspend fun setLanguage(lang: String) = context.dataStore.edit { it[KEY_LANGUAGE] = lang }
+
+    suspend fun setFilterMode(mode: Int) = context.dataStore.edit { it[KEY_FILTER_MODE] = mode }
+
+    suspend fun setWhitelistPackages(packages: Set<String>) = context.dataStore.edit { 
+        it[KEY_WHITELIST_PACKAGES] = packages.joinToString(",") 
+    }
+
+    suspend fun setBypassLan(enable: Boolean) = context.dataStore.edit { it[KEY_BYPASS_LAN] = enable }
+    suspend fun setStrictDoh(enable: Boolean) = context.dataStore.edit { it[KEY_STRICT_DOH] = enable }
+    suspend fun setBlockIpv6(enable: Boolean) = context.dataStore.edit { it[KEY_BLOCK_IPV6] = enable }
+
+    fun detectBrowsers(): List<String> {
+        val pm = context.packageManager
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com"))
+        val resolveInfos = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            pm.queryIntentActivities(intent, android.content.pm.PackageManager.ResolveInfoFlags.of(0))
+        } else {
+            pm.queryIntentActivities(intent, 0)
+        }
+        return resolveInfos.map { it.activityInfo.packageName }.distinct()
+    }
 
     // Rules Operations
 
