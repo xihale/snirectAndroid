@@ -45,6 +45,7 @@ import com.xihale.snirect.ui.screens.*
 import com.xihale.snirect.ui.theme.AppIcons
 import com.xihale.snirect.ui.theme.SnirectTheme
 import com.xihale.snirect.util.AppLogger
+import com.xihale.snirect.util.CertUtil
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -86,8 +87,19 @@ class MainViewModel(private val repository: ConfigRepository) : ViewModel() {
         if (isRunning) {
             stopVpn(context)
         } else {
-            prepareVpn(context)
+            kotlinx.coroutines.MainScope().launch {
+                val skipCheck = repository.skipCertCheck.first()
+                if (!skipCheck && !CertUtil.isCaCertInstalled()) {
+                    Toast.makeText(context, "Please install CA certificate first!", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                prepareVpn(context)
+            }
         }
+    }
+
+    private fun isCaCertInstalled(): Boolean {
+        return CertUtil.isCaCertInstalled()
     }
 
     private fun prepareVpn(context: android.content.Context) {
@@ -206,7 +218,13 @@ class MainActivity : ComponentActivity() {
 
                         if (hasNotifPermission) {
                             AppLogger.i("Auto-activation: Permission granted, triggering VPN...")
-                            viewModel.startVpn(context)
+                            val skipCheck = repository.skipCertCheck.first()
+                            if (!skipCheck && !CertUtil.isCaCertInstalled()) {
+                                AppLogger.w("Auto-activation: Blocked - CA certificate not installed")
+                                Toast.makeText(context, "Auto-start blocked: Please install CA certificate", Toast.LENGTH_LONG).show()
+                            } else {
+                                viewModel.startVpn(context)
+                            }
                         } else {
                             AppLogger.i("Auto-activation: Notification permission not granted, waiting for user.")
                         }
@@ -321,36 +339,30 @@ fun SnirectApp(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val statusColor = if (viewModel.isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val activeColor = if (viewModel.isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
 
-    var showHelpDialog by remember { mutableStateOf(false) }
+    var showCertPrompt by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val hasShownHelp = repository.hasShownHelp.first()
-        if (!hasShownHelp) {
-            showHelpDialog = true
+        val skipCheck = repository.skipCertCheck.first()
+        if (!skipCheck && !CertUtil.isCaCertInstalled()) {
+            showCertPrompt = true
         }
     }
 
-    if (showHelpDialog) {
+    if (showCertPrompt) {
         AlertDialog(
-            onDismissRequest = { 
-                showHelpDialog = false 
-                scope.launch { repository.setHasShownHelp(true) }
-            },
-            title = { Text("Welcome to Snirect") },
-            text = { Text("To enable HTTPS decryption and SNI modification, you need to install a CA certificate. Would you like to view the setup guide?") },
+            onDismissRequest = { showCertPrompt = false },
+            title = { Text("Certificate Required") },
+            text = { Text("CA Certificate is not installed or trusted. HTTPS decryption will not work. Would you like to view the installation guide?") },
             confirmButton = {
                 Button(onClick = {
-                    showHelpDialog = false
-                    scope.launch { repository.setHasShownHelp(true) }
+                    showCertPrompt = false
                     navController.navigate("help")
                 }) { Text("View Guide") }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    showHelpDialog = false
-                    scope.launch { repository.setHasShownHelp(true) }
-                }) { Text("Later") }
+                TextButton(onClick = { showCertPrompt = false }) { Text("Later") }
             }
         )
     }
@@ -467,11 +479,7 @@ fun SnirectApp(
                         onClick = { viewModel.toggleVpn(context) },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = MaterialTheme.shapes.medium,
-                        colors = if (viewModel.isRunning) {
-                            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                        } else {
-                            ButtonDefaults.buttonColors()
-                        }
+                        colors = ButtonDefaults.buttonColors(containerColor = activeColor)
                     ) {
                         Text(if (viewModel.isRunning) "DEACTIVATE" else "ACTIVATE")
                     }

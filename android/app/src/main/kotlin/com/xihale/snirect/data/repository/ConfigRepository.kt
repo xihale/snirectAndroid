@@ -57,6 +57,7 @@ class ConfigRepository(private val context: Context) {
         val KEY_ACTIVATE_ON_STARTUP = booleanPreferencesKey("activate_on_startup")
         val KEY_ACTIVATE_ON_BOOT = booleanPreferencesKey("activate_on_boot")
         val KEY_HAS_SHOWN_HELP = booleanPreferencesKey("has_shown_help")
+        val KEY_SKIP_CERT_CHECK = booleanPreferencesKey("skip_cert_check")
         
         const val DEFAULT_NAMESERVERS = "https://dnschina1.soraharu.com/dns-query,https://77.88.8.8/dns-query,https://dns.google/dns-query"
         const val DEFAULT_BOOTSTRAP_DNS = "tls://223.5.5.5"
@@ -85,6 +86,7 @@ class ConfigRepository(private val context: Context) {
     val activateOnStartup: Flow<Boolean> = context.dataStore.data.map { it[KEY_ACTIVATE_ON_STARTUP] ?: true }
     val activateOnBoot: Flow<Boolean> = context.dataStore.data.map { it[KEY_ACTIVATE_ON_BOOT] ?: false }
     val hasShownHelp: Flow<Boolean> = context.dataStore.data.map { it[KEY_HAS_SHOWN_HELP] ?: false }
+    val skipCertCheck: Flow<Boolean> = context.dataStore.data.map { it[KEY_SKIP_CERT_CHECK] ?: false }
 
     suspend fun setNameservers(servers: List<String>) = context.dataStore.edit { 
         it[KEY_NAMESERVERS] = servers.joinToString(",") 
@@ -102,8 +104,10 @@ class ConfigRepository(private val context: Context) {
     suspend fun setActivateOnStartup(enable: Boolean) = context.dataStore.edit { it[KEY_ACTIVATE_ON_STARTUP] = enable }
     suspend fun setActivateOnBoot(enable: Boolean) = context.dataStore.edit { it[KEY_ACTIVATE_ON_BOOT] = enable }
     suspend fun setHasShownHelp(shown: Boolean) = context.dataStore.edit { it[KEY_HAS_SHOWN_HELP] = shown }
+    suspend fun setSkipCertCheck(skip: Boolean) = context.dataStore.edit { it[KEY_SKIP_CERT_CHECK] = skip }
 
     // Rules Operations
+
 
     suspend fun getAllRulesWithSource(): List<RuleWithSource> = withContext(Dispatchers.IO) {
         copyAssetsIfNeeded()

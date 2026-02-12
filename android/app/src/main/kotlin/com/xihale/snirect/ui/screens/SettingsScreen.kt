@@ -36,6 +36,7 @@ fun SettingsScreen(
     var logLevel by remember { mutableStateOf("info") }
     var activateOnStartup by remember { mutableStateOf(true) }
     var activateOnBoot by remember { mutableStateOf(false) }
+    var skipCertCheck by remember { mutableStateOf(false) }
     
     val scope = rememberCoroutineScope()
     
@@ -62,6 +63,9 @@ fun SettingsScreen(
     }
     LaunchedEffect(Unit) {
         repository.activateOnBoot.collect { activateOnBoot = it }
+    }
+    LaunchedEffect(Unit) {
+        repository.skipCertCheck.collect { skipCertCheck = it }
     }
 
     Scaffold(
@@ -156,7 +160,7 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsGroup(title = "Automation") {
+            SettingsGroup(title = "Automation & Security") {
                 SettingsTile(
                     icon = AppIcons.Terminal,
                     title = "Active on App Start",
@@ -183,6 +187,21 @@ fun SettingsScreen(
                         onCheckedChange = {
                             activateOnBoot = it
                             scope.launch { repository.setActivateOnBoot(it) }
+                        }
+                    )
+                }
+
+                SettingsTile(
+                    icon = AppIcons.Shield,
+                    title = "Skip Certificate Check",
+                    subtitle = "Do not check if CA cert is installed before starting",
+                    onClick = { }
+                ) {
+                    Switch(
+                        checked = skipCertCheck,
+                        onCheckedChange = {
+                            skipCertCheck = it
+                            scope.launch { repository.setSkipCertCheck(it) }
                         }
                     )
                 }
