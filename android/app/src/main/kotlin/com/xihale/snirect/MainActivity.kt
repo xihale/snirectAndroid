@@ -232,7 +232,10 @@ class MainActivity : ComponentActivity() {
                         popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) + fadeOut() }
                     ) {
                         composable("home") {
-                            SnirectApp(navController = navController, viewModel = viewModel)
+                            SnirectApp(navController = navController, viewModel = viewModel, repository = repository)
+                        }
+                        composable("help") {
+                            HelpScreen(navController = navController)
                         }
                         composable("settings") {
                             SettingsScreen(navController = navController, repository = repository)
@@ -312,10 +315,45 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun SnirectApp(
     navController: androidx.navigation.NavController,
-    viewModel: MainViewModel
+    viewModel: MainViewModel,
+    repository: ConfigRepository
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val statusColor = if (viewModel.isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+
+    var showHelpDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val hasShownHelp = repository.hasShownHelp.first()
+        if (!hasShownHelp) {
+            showHelpDialog = true
+        }
+    }
+
+    if (showHelpDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showHelpDialog = false 
+                scope.launch { repository.setHasShownHelp(true) }
+            },
+            title = { Text("Welcome to Snirect") },
+            text = { Text("To enable HTTPS decryption and SNI modification, you need to install a CA certificate. Would you like to view the setup guide?") },
+            confirmButton = {
+                Button(onClick = {
+                    showHelpDialog = false
+                    scope.launch { repository.setHasShownHelp(true) }
+                    navController.navigate("help")
+                }) { Text("View Guide") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showHelpDialog = false
+                    scope.launch { repository.setHasShownHelp(true) }
+                }) { Text("Later") }
+            }
+        )
+    }
 
     val vpnLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -370,6 +408,9 @@ fun SnirectApp(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { navController.navigate("help") }) {
+                        Icon(Icons.Default.Info, contentDescription = "Help")
+                    }
                     IconButton(onClick = { navController.navigate("logs") }) {
                         Icon(AppIcons.Terminal, contentDescription = "Logs")
                     }
