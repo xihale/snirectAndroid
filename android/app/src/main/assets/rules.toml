@@ -1,5 +1,27 @@
 # Default local rules (User overrides)
 # Priority: High
+#
+# Rule Matching Patterns:
+#   *example.com  - Matches all domains ending with example.com
+#   example*      - Matches all domains starting with example
+#   $example.com  - Strict match, only "example.com" exactly
+#   #...          - Commented out rule (ignored)
+#
+# __AUTO__ Marker:
+#   - alter_hostname: Use "__AUTO__" to preserve original SNI (no modification)
+#   - hosts: Use "__AUTO__" to use dynamic DNS instead of static IP
+#   - Used to override fetched rules and use default program behavior
+#
+# 规则匹配模式:
+#   *example.com  - 匹配所有以 example.com 结尾的域名
+#   example*      - 匹配所有以 example 开头的域名
+#   $example.com  - 精确匹配，仅 "example.com"
+#   #...          - 被注释的规则（忽略）
+#
+# __AUTO__ 标记:
+#   - alter_hostname: 使用 "__AUTO__" 保留原始 SNI（不修改）
+#   - hosts: 使用 "__AUTO__" 使用动态 DNS 而非静态 IP
+#   - 用于覆盖 fetched rules，使用程序默认行为
 
 [alter_hostname]
 "*google*" = "" # Strip SNI since www.google.com is not allowed and g.cn fails
@@ -9,6 +31,9 @@
 "pximg.net" = "www.pixiv.net"
 
 [hosts]
+# Example: Use __AUTO__ for dynamic DNS (DoH/DoT) instead of static IP
+# 示例：使用 __AUTO__ 通过 DoH/DoT 动态解析，而非静态 IP
+# "store.steampowered.com" = "__AUTO__"
 "*pixiv.net" = "210.140.131.199"
 "$*.google.com.hk" = "34.49.133.3"
 

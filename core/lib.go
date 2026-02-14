@@ -185,25 +185,41 @@ func UpdateRules(configStr string) error {
 		return err
 	}
 
-	rules := ruleslib.NewRules()
+	// Start with existing base rules (fetched rules)
+	globalEngine.mu.RLock()
+	baseRules := globalEngine.rules
+	if baseRules == nil {
+		baseRules = ruleslib.NewRules()
+	}
+	globalEngine.mu.RUnlock()
+
+	// Build user rules from config
+	userAlterHostname := make(map[string]string)
 	for _, rule := range config.Rules {
 		for _, pattern := range rule.Patterns {
 			if rule.TargetSNI != nil {
-				rules.AlterHostname[pattern] = *rule.TargetSNI
+				userAlterHostname[pattern] = *rule.TargetSNI
+			}
+			if rule.TargetIP != nil {
+				userAlterHostname[pattern+"|hosts"] = *rule.TargetIP
 			}
 		}
 	}
+
+	userCertVerify := make(map[string]any)
 	for _, rule := range config.CertVerify {
 		for _, pattern := range rule.Patterns {
-			rules.CertVerify[pattern] = rule.Verify
+			userCertVerify[pattern] = rule.Verify
 		}
 	}
-	rules.Init()
+
+	// Merge user rules with base rules, handling __AUTO__
+	mergeRulesWithOverride(baseRules, userAlterHostname, userCertVerify, make(map[string]string))
 
 	globalEngine.mu.Lock()
-	globalEngine.rules = rules
+	globalEngine.rules = baseRules
 	globalEngine.mu.Unlock()
-	LogInfo("CORE: Rules updated (%d rules)", len(config.Rules))
+	LogInfo("CORE: Rules updated (%d alter rules, %d cert verify rules)", len(userAlterHostname), len(userCertVerify))
 	return nil
 }
 

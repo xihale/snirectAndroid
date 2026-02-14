@@ -8,6 +8,8 @@ import (
 	ruleslib "github.com/xihale/snirect-shared/rules"
 )
 
+const AutoMarker = "__AUTO__"
+
 type Rule struct {
 	Patterns   []string `json:"patterns"`
 	TargetSNI  *string  `json:"target_sni"`
@@ -32,14 +34,43 @@ type Config struct {
 }
 
 type Engine struct {
-	mu         sync.RWMutex
-	rules      *ruleslib.Rules
-	config     *Config
-	resolver   *Resolver
-	cb         EngineCallbacks
+	mu       sync.RWMutex
+	rules    *ruleslib.Rules
+	config   *Config
+	resolver *Resolver
+	cb       EngineCallbacks
 }
 
 var globalEngine = &Engine{}
+
+// mergeRulesWithOverride handles __AUTO__ marker by removing rules from base
+func mergeRulesWithOverride(base *ruleslib.Rules, userAlterHostname map[string]string, userCertVerify map[string]any, userHosts map[string]string) {
+	// Process alter_hostname rules
+	for pattern, value := range userAlterHostname {
+		if value == AutoMarker {
+			delete(base.AlterHostname, pattern)
+		} else {
+			base.AlterHostname[pattern] = value
+		}
+	}
+
+	// Process cert_verify rules
+	for pattern, value := range userCertVerify {
+		base.CertVerify[pattern] = value
+	}
+
+	// Process hosts rules
+	for pattern, value := range userHosts {
+		if value == AutoMarker {
+			delete(base.Hosts, pattern)
+		} else {
+			base.Hosts[pattern] = value
+		}
+	}
+
+	// Reinitialize sorted keys
+	base.Init()
+}
 
 func InitEngine(jsonConfig string, cb EngineCallbacks) (*Config, error) {
 	var config Config
@@ -49,7 +80,7 @@ func InitEngine(jsonConfig string, cb EngineCallbacks) (*Config, error) {
 
 	// Convert JSON config to shared Rules
 	rules := ruleslib.NewRules()
-	
+
 	for _, rule := range config.Rules {
 		for _, pattern := range rule.Patterns {
 			if rule.TargetSNI != nil {
@@ -57,13 +88,13 @@ func InitEngine(jsonConfig string, cb EngineCallbacks) (*Config, error) {
 			}
 		}
 	}
-	
+
 	for _, rule := range config.CertVerify {
 		for _, pattern := range rule.Patterns {
 			rules.CertVerify[pattern] = rule.Verify
 		}
 	}
-	
+
 	rules.Init()
 
 	globalEngine.mu.Lock()
@@ -105,7 +136,7 @@ func (e *Engine) Match(sni string) *Rule {
 	defer e.mu.RUnlock()
 
 	LogDebug("Engine: Matching SNI '%s' against rules", sni)
-	
+
 	targetSNI, ok := e.rules.GetAlterHostname(sni)
 	if !ok {
 		return nil
@@ -122,7 +153,7 @@ func (e *Engine) MatchCertVerify(sni string) any {
 	defer e.mu.RUnlock()
 
 	LogDebug("Engine: Matching CertVerify for '%s' against rules", sni)
-	
+
 	certPolicy, ok := e.rules.GetCertVerify(sni)
 	if !ok {
 		return nil

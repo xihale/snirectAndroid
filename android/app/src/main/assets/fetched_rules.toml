@@ -94,6 +94,8 @@
 "*greasyfork.org" = ""
 "*itch.io" = ""
 "*steamcommunity.com" = ""
+# store.steampowered.com: SNI stripping in fetched rules
+# Use __AUTO__ in user rules to keep original SNI and use dynamic DNS
 "store.steampowered.com" = ""
 "hello.vrchat.com" = ""
 "ask.vrchat.com" = ""
