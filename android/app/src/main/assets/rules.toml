@@ -3,12 +3,14 @@
 
 [alter_hostname]
 "*google*" = "" # Strip SNI since www.google.com is not allowed and g.cn fails
+"*.google.com.hk" = ""
 "*duckduckgo*" = "" # Strip SNI
 "*pixiv.net" = "www.pixiv.net"
 "pximg.net" = "www.pixiv.net"
 
 [hosts]
 "*pixiv.net" = "210.140.131.199"
+"$*.google.com.hk" = "34.49.133.3"
 
 [cert_verify]
 "*google*" = "false"
