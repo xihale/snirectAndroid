@@ -4,11 +4,9 @@ go 1.25.6
 
 require (
 	github.com/miekg/dns v1.1.72
-	github.com/xihale/snirect/shared v0.0.0
+	github.com/xihale/snirect-shared v1.0.0
 	gvisor.dev/gvisor v0.0.0-20260202191832-0bd9aedd142c
 )
-
-replace github.com/xihale/snirect/shared => /home/xihale/Desktop/learning/snirect-shared
 
 require (
 	github.com/google/btree v1.1.2 // indirect
