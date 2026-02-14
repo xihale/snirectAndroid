@@ -4,7 +4,7 @@ go 1.25.6
 
 require (
 	github.com/miekg/dns v1.1.72
-	github.com/xihale/snirect-shared v1.2.0
+	github.com/xihale/snirect-shared v1.1.1
 	gvisor.dev/gvisor v0.0.0-20260202191832-0bd9aedd142c
 )
 
