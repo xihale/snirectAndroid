@@ -335,8 +335,18 @@ func handleDNSConnection(conn net.Conn, cb EngineCallbacks) {
 		LogDebug("Inbound DNS Query: %s (Type: %d)", qName, qType)
 
 		globalEngine.mu.RLock()
+		cfg := globalEngine.config
 		rules := globalEngine.rules
 		globalEngine.mu.RUnlock()
+
+		if cfg != nil && !cfg.EnableIPv6 && qType == dns.TypeAAAA {
+			LogInfo("DNS: Blocking AAAA query for %s (IPv6 disabled)", qName)
+			reply := new(dns.Msg)
+			reply.SetReply(msg)
+			replyData, _ := reply.Pack()
+			conn.Write(replyData)
+			return
+		}
 
 		for _, rule := range rules {
 			matched := false

@@ -4,6 +4,19 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.serialization'
 }
 
+// 动态从 Git 获取版本号 (使用 commit 总数)
+def getGitVersionCode(project) {
+    try {
+        def count = project.providers.exec {
+            workingDir project.rootProject.projectDir.parentFile
+            commandLine 'git', 'rev-list', '--count', 'HEAD'
+        }.standardOutput.asText.get().trim()
+        return count.toInteger()
+    } catch (Exception e) {
+        return 1
+    }
+}
+
 // 动态从 Git Tag 获取版本名
 def getGitVersionName(project) {
     try {
@@ -24,7 +37,7 @@ android {
         applicationId "com.xihale.snirect"
         minSdk 26
         targetSdk 36
-        versionCode 1
+        versionCode getGitVersionCode(project)
         
         versionName getGitVersionName(project)
 
