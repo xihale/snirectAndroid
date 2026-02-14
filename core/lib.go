@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	ruleslib "github.com/xihale/snirect-shared/rules"
 )
 
 type EngineCallbacks interface {
@@ -182,9 +184,24 @@ func UpdateRules(configStr string) error {
 	if err := json.Unmarshal([]byte(configStr), &config); err != nil {
 		return err
 	}
+
+	rules := ruleslib.NewRules()
+	for _, rule := range config.Rules {
+		for _, pattern := range rule.Patterns {
+			if rule.TargetSNI != nil {
+				rules.AlterHostname[pattern] = *rule.TargetSNI
+			}
+		}
+	}
+	for _, rule := range config.CertVerify {
+		for _, pattern := range rule.Patterns {
+			rules.CertVerify[pattern] = rule.Verify
+		}
+	}
+	rules.Init()
+
 	globalEngine.mu.Lock()
-	globalEngine.rules = config.Rules
-	globalEngine.certVerify = config.CertVerify
+	globalEngine.rules = rules
 	globalEngine.mu.Unlock()
 	LogInfo("CORE: Rules updated (%d rules)", len(config.Rules))
 	return nil

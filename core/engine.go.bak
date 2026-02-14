@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-
-	ruleslib "github.com/xihale/snirect-shared/rules"
 )
 
 type Rule struct {
@@ -33,7 +31,8 @@ type Config struct {
 
 type Engine struct {
 	mu         sync.RWMutex
-	rules      *ruleslib.Rules
+	rules      []Rule
+	certVerify []CertVerifyRule
 	config     *Config
 	resolver   *Resolver
 	cb         EngineCallbacks
@@ -47,27 +46,9 @@ func InitEngine(jsonConfig string, cb EngineCallbacks) (*Config, error) {
 		return nil, fmt.Errorf("config parse error: %v", err)
 	}
 
-	// Convert JSON config to shared Rules
-	rules := ruleslib.NewRules()
-	
-	for _, rule := range config.Rules {
-		for _, pattern := range rule.Patterns {
-			if rule.TargetSNI != nil {
-				rules.AlterHostname[pattern] = *rule.TargetSNI
-			}
-		}
-	}
-	
-	for _, rule := range config.CertVerify {
-		for _, pattern := range rule.Patterns {
-			rules.CertVerify[pattern] = rule.Verify
-		}
-	}
-	
-	rules.Init()
-
 	globalEngine.mu.Lock()
-	globalEngine.rules = rules
+	globalEngine.rules = config.Rules
+	globalEngine.certVerify = config.CertVerify
 	globalEngine.config = &config
 	globalEngine.cb = cb
 	SetLogLevel(config.LogLevel)
@@ -104,43 +85,41 @@ func (e *Engine) Match(sni string) *Rule {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	LogDebug("Engine: Matching SNI '%s' against rules", sni)
-	
-	targetSNI, ok := e.rules.GetAlterHostname(sni)
-	if !ok {
-		return nil
+	LogDebug("Engine: Matching SNI '%s' against %d rules", sni, len(e.rules))
+	for i := range e.rules {
+		rule := &e.rules[i]
+		for _, pattern := range rule.Patterns {
+			if MatchPattern(pattern, sni) {
+				targetSNI := ""
+				if rule.TargetSNI != nil {
+					targetSNI = *rule.TargetSNI
+				}
+				targetIP := ""
+				if rule.TargetIP != nil {
+					targetIP = *rule.TargetIP
+				}
+				LogInfo("Engine: Matched rule for '%s' with pattern '%s' -> SNI='%s', IP='%s'",
+					sni, pattern, targetSNI, targetIP)
+				return rule
+			}
+		}
 	}
-
-	return &Rule{
-		Patterns:  []string{sni},
-		TargetSNI: &targetSNI,
-	}
+	return nil
 }
 
 func (e *Engine) MatchCertVerify(sni string) any {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	LogDebug("Engine: Matching CertVerify for '%s' against rules", sni)
-	
-	certPolicy, ok := e.rules.GetCertVerify(sni)
-	if !ok {
-		return nil
-	}
-
-	// Convert CertPolicy to original format
-	if certPolicy.Verify && len(certPolicy.Allow) == 0 {
-		return true
-	} else if !certPolicy.Verify && len(certPolicy.Allow) == 0 {
-		return false
-	} else if len(certPolicy.Allow) == 1 {
-		return certPolicy.Allow[0]
-	} else {
-		// Convert []string to []interface{} for JSON compatibility
-		result := make([]interface{}, len(certPolicy.Allow))
-		for i, v := range certPolicy.Allow {
-			result[i] = v
+	LogDebug("Engine: Matching CertVerify for '%s' against %d rules", sni, len(e.certVerify))
+	for i := range e.certVerify {
+		rule := &e.certVerify[i]
+		for _, pattern := range rule.Patterns {
+			if MatchPattern(pattern, sni) {
+				LogDebug("Engine: CertVerify matched '%s' with pattern '%s' -> %v", sni, pattern, rule.Verify)
+				return rule.Verify
+			}
 		}
-		return result
 	}
+	return nil
 }

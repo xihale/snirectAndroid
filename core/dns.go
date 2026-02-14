@@ -53,15 +53,9 @@ func (r *Resolver) Resolve(ctx context.Context, host string) (string, error) {
 	globalEngine.mu.RLock()
 	rules := globalEngine.rules
 	globalEngine.mu.RUnlock()
-	for _, rule := range rules {
-		for _, p := range rule.Patterns {
-			if MatchPattern(p, host) {
-				if rule.TargetIP != nil && *rule.TargetIP != "" && net.ParseIP(*rule.TargetIP) != nil {
-					LogDebug("DNS Rule Match: %s -> %s", host, *rule.TargetIP)
-					return *rule.TargetIP, nil
-				}
-			}
-		}
+	if ip, ok := rules.GetHost(host); ok && net.ParseIP(ip) != nil {
+		LogDebug("DNS Rule Match: %s -> %s", host, ip)
+		return ip, nil
 	}
 
 	if ip, ok := r.getCache(host, dns.TypeA); ok {
@@ -348,39 +342,28 @@ func handleDNSConnection(conn net.Conn, cb EngineCallbacks) {
 			return
 		}
 
-		for _, rule := range rules {
-			matched := false
-			for _, p := range rule.Patterns {
-				if MatchPattern(p, qName) {
-					matched = true
-					break
-				}
-			}
-			if matched && rule.TargetIP != nil && *rule.TargetIP != "" {
-				if qType == dns.TypeA {
-					LogInfo("DNS Hijack: %s -> %s (Rule Match)", qName, *rule.TargetIP)
-					reply := new(dns.Msg)
-					reply.SetReply(msg)
+		if ip, ok := rules.GetHost(qName); ok && net.ParseIP(ip) != nil {
+			if qType == dns.TypeA {
+				LogInfo("DNS Hijack: %s -> %s (Rule Match)", qName, ip)
+				reply := new(dns.Msg)
+				reply.SetReply(msg)
 
-					targetIP := *rule.TargetIP
-					if net.ParseIP(targetIP) != nil {
-						rr, err := dns.NewRR(fmt.Sprintf("%s 3600 IN A %s", msg.Question[0].Name, targetIP))
-						if err == nil {
-							reply.Answer = append(reply.Answer, rr)
-							replyData, _ := reply.Pack()
-							conn.Write(replyData)
-							return
-						}
-					}
-				} else if qType == dns.TypeAAAA {
-					// Return empty success for AAAA if we hijack A, to avoid IPv6 issues
-					LogInfo("DNS Hijack (AAAA): %s -> EMPTY (Rule Match)", qName)
-					reply := new(dns.Msg)
-					reply.SetReply(msg)
+				targetIP := ip
+				rr, err := dns.NewRR(fmt.Sprintf("%s 3600 IN A %s", msg.Question[0].Name, targetIP))
+				if err == nil {
+					reply.Answer = append(reply.Answer, rr)
 					replyData, _ := reply.Pack()
 					conn.Write(replyData)
 					return
 				}
+			} else if qType == dns.TypeAAAA {
+				// Return empty success for AAAA if we hijack A, to avoid IPv6 issues
+				LogInfo("DNS Hijack (AAAA): %s -> EMPTY (Rule Match)", qName)
+				reply := new(dns.Msg)
+				reply.SetReply(msg)
+				replyData, _ := reply.Pack()
+				conn.Write(replyData)
+				return
 			}
 		}
 	}
