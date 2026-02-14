@@ -195,13 +195,14 @@ func UpdateRules(configStr string) error {
 
 	// Build user rules from config
 	userAlterHostname := make(map[string]string)
+	userHosts := make(map[string]string)
 	for _, rule := range config.Rules {
 		for _, pattern := range rule.Patterns {
 			if rule.TargetSNI != nil {
 				userAlterHostname[pattern] = *rule.TargetSNI
 			}
 			if rule.TargetIP != nil {
-				userAlterHostname[pattern+"|hosts"] = *rule.TargetIP
+				userHosts[pattern] = *rule.TargetIP
 			}
 		}
 	}
@@ -214,7 +215,7 @@ func UpdateRules(configStr string) error {
 	}
 
 	// Merge user rules with base rules, handling __AUTO__
-	mergeRulesWithOverride(baseRules, userAlterHostname, userCertVerify, make(map[string]string))
+	mergeRulesWithOverride(baseRules, userAlterHostname, userCertVerify, userHosts)
 
 	globalEngine.mu.Lock()
 	globalEngine.rules = baseRules
