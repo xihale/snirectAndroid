@@ -78,8 +78,10 @@ func InitEngine(jsonConfig string, cb EngineCallbacks) (*Config, error) {
 		return nil, fmt.Errorf("config parse error: %v", err)
 	}
 
-	// Convert JSON config to shared Rules
-	rules := ruleslib.NewRules()
+	rules, err := ruleslib.LoadRules()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load base rules: %v", err)
+	}
 
 	for _, rule := range config.Rules {
 		for _, pattern := range rule.Patterns {

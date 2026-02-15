@@ -39,7 +39,6 @@ class ConfigRepository(
     private val context: Context,
 ) {
     private val localRulesFile = File(context.filesDir, "rules.toml")
-    private val fetchedRulesFile = File(context.filesDir, "fetched_rules.toml")
 
     private val toml =
         Toml(
@@ -172,56 +171,24 @@ class ConfigRepository(
         withContext(Dispatchers.IO) {
             copyAssetsIfNeeded()
             val local = readRulesFromFile(localRulesFile).first.map { RuleWithSource(it, true) }
-            val fetched = readRulesFromFile(fetchedRulesFile).first.map { RuleWithSource(it, false) }
-
-            // Local rules override remote rules with the same pattern/SNI combination
-            val localPatternSniSet = local.map { Pair(it.rule.patterns ?: emptyList(), it.rule.targetSni) }.toSet()
-            val filteredFetched =
-                fetched.filter { rule ->
-                    val patternSniPair = Pair(rule.rule.patterns ?: emptyList(), rule.rule.targetSni)
-                    !localPatternSniSet.contains(patternSniPair)
-                }
-
-            local + filteredFetched
+            local
         }
 
     private fun copyAssetsIfNeeded() {
-        if (!localRulesFile.exists()) {
-            try {
-                context.assets.open("rules.toml").use { input ->
-                    localRulesFile.outputStream().use { output -> input.copyTo(output) }
-                }
-            } catch (e: Exception) {
-                AppLogger.e("Failed to copy rules.toml", e)
-            }
-        }
-
-        if (!fetchedRulesFile.exists()) {
-            try {
-                context.assets.open("fetched_rules.toml").use { input ->
-                    fetchedRulesFile.outputStream().use { output -> input.copyTo(output) }
-                }
-            } catch (e: Exception) {
-                // fetched_rules.toml might not exist in assets, which is fine
-                AppLogger.d("No fetched_rules.toml in assets or copy failed: ${e.message}")
-            }
-        }
     }
 
     suspend fun getMergedRules(): List<Rule> =
         withContext(Dispatchers.IO) {
             copyAssetsIfNeeded()
             val local = readRulesFromFile(localRulesFile).first.sortedByDescending { !it.targetSni.isNullOrBlank() }
-            val fetched = readRulesFromFile(fetchedRulesFile).first.sortedByDescending { !it.targetSni.isNullOrBlank() }
-            local + fetched
+            local
         }
 
     suspend fun getMergedCertVerify(): List<CertVerifyRule> =
         withContext(Dispatchers.IO) {
             copyAssetsIfNeeded()
             val local = readRulesFromFile(localRulesFile).second
-            val fetched = readRulesFromFile(fetchedRulesFile).second
-            local + fetched
+            local
         }
 
     private fun resetToDefault(file: File) {
@@ -282,10 +249,9 @@ class ConfigRepository(
             writeRulesToFile(localRulesFile, rules)
         }
 
-    suspend fun saveFetchedRules(rules: List<Rule>) =
-        withContext(Dispatchers.IO) {
-            writeRulesToFile(fetchedRulesFile, rules)
-        }
+    @Suppress("UNUSED")
+    private fun saveFetchedRules(rules: List<Rule>) {
+    }
 
     private fun writeRulesToFile(
         file: File,

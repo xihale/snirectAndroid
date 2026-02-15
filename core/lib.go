@@ -185,13 +185,10 @@ func UpdateRules(configStr string) error {
 		return err
 	}
 
-	// Start with existing base rules (fetched rules)
-	globalEngine.mu.RLock()
-	baseRules := globalEngine.rules
-	if baseRules == nil {
-		baseRules = ruleslib.NewRules()
+	baseRules, err := ruleslib.LoadRules()
+	if err != nil {
+		return fmt.Errorf("failed to load base rules: %w", err)
 	}
-	globalEngine.mu.RUnlock()
 
 	// Build user rules from config
 	userAlterHostname := make(map[string]string)
@@ -214,7 +211,6 @@ func UpdateRules(configStr string) error {
 		}
 	}
 
-	// Merge user rules with base rules, handling __AUTO__
 	mergeRulesWithOverride(baseRules, userAlterHostname, userCertVerify, userHosts)
 
 	globalEngine.mu.Lock()
