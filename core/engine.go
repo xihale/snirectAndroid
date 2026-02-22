@@ -8,8 +8,6 @@ import (
 	ruleslib "github.com/xihale/snirect-shared/rules"
 )
 
-const AutoMarker = "__AUTO__"
-
 type Rule struct {
 	Patterns   []string `json:"patterns"`
 	TargetSNI  *string  `json:"target_sni"`
@@ -43,35 +41,6 @@ type Engine struct {
 
 var globalEngine = &Engine{}
 
-// mergeRulesWithOverride handles __AUTO__ marker by removing rules from base
-func mergeRulesWithOverride(base *ruleslib.Rules, userAlterHostname map[string]string, userCertVerify map[string]any, userHosts map[string]string) {
-	// Process alter_hostname rules
-	for pattern, value := range userAlterHostname {
-		if value == AutoMarker {
-			delete(base.AlterHostname, pattern)
-		} else {
-			base.AlterHostname[pattern] = value
-		}
-	}
-
-	// Process cert_verify rules
-	for pattern, value := range userCertVerify {
-		base.CertVerify[pattern] = value
-	}
-
-	// Process hosts rules
-	for pattern, value := range userHosts {
-		if value == AutoMarker {
-			delete(base.Hosts, pattern)
-		} else {
-			base.Hosts[pattern] = value
-		}
-	}
-
-	// Reinitialize sorted keys
-	base.Init()
-}
-
 func InitEngine(jsonConfig string, cb EngineCallbacks) (*Config, error) {
 	var config Config
 	if err := json.Unmarshal([]byte(jsonConfig), &config); err != nil {
@@ -83,21 +52,25 @@ func InitEngine(jsonConfig string, cb EngineCallbacks) (*Config, error) {
 		return nil, fmt.Errorf("failed to load base rules: %v", err)
 	}
 
+	userRules := ruleslib.NewRules()
 	for _, rule := range config.Rules {
 		for _, pattern := range rule.Patterns {
 			if rule.TargetSNI != nil {
-				rules.AlterHostname[pattern] = *rule.TargetSNI
+				userRules.AlterHostname[pattern] = *rule.TargetSNI
+			}
+			if rule.TargetIP != nil {
+				userRules.Hosts[pattern] = *rule.TargetIP
 			}
 		}
 	}
 
 	for _, rule := range config.CertVerify {
 		for _, pattern := range rule.Patterns {
-			rules.CertVerify[pattern] = rule.Verify
+			userRules.CertVerify[pattern] = rule.Verify
 		}
 	}
 
-	rules.Init()
+	ruleslib.ApplyOverrides(rules, userRules, ruleslib.DefaultAutoMarker)
 
 	globalEngine.mu.Lock()
 	globalEngine.rules = rules

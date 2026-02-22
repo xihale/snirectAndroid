@@ -211,7 +211,11 @@ func UpdateRules(configStr string) error {
 		}
 	}
 
-	mergeRulesWithOverride(baseRules, userAlterHostname, userCertVerify, userHosts)
+	userRules := ruleslib.NewRules()
+	userRules.AlterHostname = userAlterHostname
+	userRules.CertVerify = userCertVerify
+	userRules.Hosts = userHosts
+	ruleslib.ApplyOverrides(baseRules, userRules, ruleslib.DefaultAutoMarker)
 
 	globalEngine.mu.Lock()
 	globalEngine.rules = baseRules

@@ -4,7 +4,7 @@ go 1.25.6
 
 require (
 	github.com/miekg/dns v1.1.72
-	github.com/xihale/snirect-shared v1.1.1
+	github.com/xihale/snirect-shared v1.3.0
 	gvisor.dev/gvisor v0.0.0-20260202191832-0bd9aedd142c
 )
 
@@ -12,6 +12,7 @@ require (
 	github.com/google/btree v1.1.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
+	golang.org/x/mobile v0.0.0-20260217195705-b56b3793a9c4 // indirect
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
